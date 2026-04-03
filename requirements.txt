@@ -1,0 +1,11 @@
+streamlit
+pandas
+numpy
+plotly
+scipy
+scikit-learn
+opencv-python-headless
+pytesseract
+PyMuPDF
+fpdf2
+Pillow
