@@ -16,6 +16,7 @@ from phenotypic_engine import PhenotypicEngine
 from kinetics_engine import BioprocessEngine
 from report_engine import AmplikonReport
 import google.generativeai as genai
+from supabase import create_client, Client
 
 # ---------------------------------------------------------
 # INLINE VISION ENGINE (Bypasses Import Cache Issues)
@@ -138,7 +139,17 @@ if not st.session_state['logged_in']:
                 st.error("Authentication Failed. Access Denied.")
     
     # 🔥 CRITICAL: This stops the rest of your app from loading!
-    st.stop() 
+    st.stop()
+    # =========================================================
+# 1.2 CLOUD DATABASE CONNECTION (SUPABASE)
+# =========================================================
+@st.cache_resource 
+def init_connection():
+    url = st.secrets["supabase"]["URL"]
+    key = st.secrets["supabase"]["KEY"]
+    return create_client(url, key)
+
+supabase = init_connection() # <--- THIS IS THE VARIABLE THE ERROR IS LOOKING FOR!
 
 
 # ---------------------------------------------------------
