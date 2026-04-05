@@ -152,6 +152,61 @@ if 'chat_history' not in st.session_state:
     st.session_state['chat_history'] = []
 
 # ---------------------------------------------------------
+# 1.3 ENTERPRISE NAVIGATION
+# ---------------------------------------------------------
+st.sidebar.markdown("### 🏢 System Navigation")
+app_mode = st.sidebar.radio(
+    "Select View:", 
+    ["🧪 Active Workspace", "☁️ Cloud Archive"]
+)
+st.sidebar.markdown("---")
+
+# ---------------------------------------------------------
+# ☁️ CLOUD ARCHIVE VIEW
+# ---------------------------------------------------------
+if app_mode == "☁️ Cloud Archive":
+    st.title("☁️ Secure Cloud Archive")
+    st.markdown("View historical experiment logs, metrics, and AI analysis directly from the Supabase database.")
+    
+    col1, col2 = st.columns([4, 1])
+    with col2:
+        if st.button("🔄 Refresh Data", use_container_width=True):
+            st.rerun()
+
+    try:
+        with st.spinner("Fetching secure records..."):
+            # Request all data from your Supabase table, ordered by newest first
+            response = supabase.table("experiment_logs").select("*").order("created_at", desc=True).execute()
+            data = response.data
+            
+            if data:
+                # Convert the raw database data into a beautiful Pandas DataFrame
+                df_archive = pd.DataFrame(data)
+                
+                # Clean up the timestamp to look professional
+                df_archive['created_at'] = pd.to_datetime(df_archive['created_at']).dt.strftime('%Y-%m-%d %H:%M:%S')
+                
+                # Rename columns for the final display
+                df_archive = df_archive.rename(columns={
+                    "id": "Log ID",
+                    "created_at": "Timestamp",
+                    "module_name": "Analysis Module",
+                    "metrics": "Calculated Metrics",
+                    "ai_summary": "AI Insights"
+                })
+                
+                # Display as an interactive, dark-theme compatible table
+                st.dataframe(df_archive, use_container_width=True, hide_index=True)
+            else:
+                st.info("📭 The Cloud Database is currently empty. Run an analysis in the Active Workspace and click 'Save to Cloud Database' to populate this archive.")
+                
+    except Exception as e:
+        st.error(f"Failed to retrieve database records: {e}")
+
+    # 🔥 CRITICAL: This stops the main workspace from loading while viewing the archive!
+    st.stop()
+
+# ---------------------------------------------------------
 # 2. SIDEBAR NAVIGATION & DATA INGESTION
 # ---------------------------------------------------------
 with st.sidebar:
