@@ -15,6 +15,7 @@ from spectral_engine import SpectralEngine
 from phenotypic_engine import PhenotypicEngine
 from kinetics_engine import BioprocessEngine
 from report_engine import AmplikonReport
+import google.generativeai as genai
 
 # ---------------------------------------------------------
 # INLINE VISION ENGINE (Bypasses Import Cache Issues)
@@ -113,6 +114,10 @@ st.markdown("""
 if 'digitized_df' not in st.session_state:
     st.session_state['digitized_df'] = pd.DataFrame()
 
+# NEW: Memory for the Global Copilot
+if 'chat_history' not in st.session_state:
+    st.session_state['chat_history'] = []
+
 # ---------------------------------------------------------
 # 2. SIDEBAR NAVIGATION & DATA INGESTION
 # ---------------------------------------------------------
@@ -123,6 +128,7 @@ with st.sidebar:
     
     module = st.radio("Intelligence Modules", [
         "🛸 Universal Telemetry Dashboard",
+        "🤖 BioSIGHT Global Copilot",  # <--- ADD THIS HERE
         "💊 Bioactivity & Pharmacodynamics (IC50/Kd)",
         "🧪 Multi-Spectral Suite (HPLC/GC-MS/UV-Vis)",
         "📊 Phenotypic & HCS Clustering",
@@ -203,18 +209,43 @@ elif module == "💊 Bioactivity & Pharmacodynamics (IC50/Kd)":
         st.divider()
         st.subheader("📄 Export Official Report")
         
-        if st.button("Generate Executive Summary (PDF)", use_container_width=True):
-            with st.spinner("Compiling PDF Document..."):
-                pdf_engine = AmplikonReport()
-                pdf_bytes = pdf_engine.generate_ic50_report(results, df_pk)
-                
-                st.download_button(
-                    label="⬇️ Download Amplikon Report.pdf",
-                    data=pdf_bytes,
-                    file_name="Amplikon_IC50_Report.pdf",
-                    mime="application/pdf",
-                    use_container_width=True
-                )
+        # ---------------------------------------------------------
+        # ✨ REAL AI ANALYST INTEGRATION (GEMINI)
+        # ---------------------------------------------------------
+        st.divider()
+        st.subheader("🤖 BioSIGHT Cognitive Analyst")
+        
+        if st.button("✨ Generate Live AI Analysis", use_container_width=True):
+            with st.spinner("Connecting to LLM Neural Engine..."):
+                try:
+                    # 1. Authenticate with your secure key
+                    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+                    
+                    # 2. Load the lightweight, fast model
+                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    
+                    # 3. Construct the "System Prompt"
+                    # We inject your live mathematical results directly into the prompt
+                    ai_prompt = f"""
+                    You are an expert computational biologist and lead pharmacologist at Amplikon Biosystems.
+                    Analyze the following high-throughput screening data for a novel drug candidate:
+                    
+                    - Calculated IC50: {results['ic50']:.3f} µM
+                    - Hill Coefficient (Slope): {results['hill']:.2f}
+                    - Regression Confidence (R²): {results['r2']:.4f}
+                    
+                    Write a concise, highly professional 3-sentence scientific conclusion. 
+                    State whether this compound exhibits strong, moderate, or weak potency. 
+                    Conclude with a recommendation on whether it should advance to in-vivo clinical trials or requires chemical optimization.
+                    Do not use markdown headers or fluff.
+                    """
+                    
+                    # 4. Fire the request to the AI and display the result
+                    response = model.generate_content(ai_prompt)
+                    st.info(response.text)
+                    
+                except Exception as e:
+                    st.error(f"AI Engine Error: Make sure your API key is configured in secrets.toml. Details: {e}")
     else:
         st.error("Curve fitting failed. The data may not follow a standard dose-response curve.")
 
@@ -336,3 +367,53 @@ elif module == "📸 Auto-Digitizer (Graph OCR)":
                         st.dataframe(extracted_df, use_container_width=True)
                 else:
                     st.error("Could not detect confident data points. Try lowering 'Minimum Point Size' and 'Shape Strictness' in the Advanced Tuning menu.")
+                    
+elif module == "🤖 BioSIGHT Global Copilot":
+    st.title("BioSIGHT Global Copilot")
+    st.caption("Your AI Research Assistant. Ask questions about your biological data.")
+    
+    # 1. Configure the Gemini Engine securely
+    try:
+        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+        model = genai.GenerativeModel('gemini-1.5-flash')
+    except Exception as e:
+        st.error(f"API Key Error: {e}. Ensure secrets.toml is configured.")
+        st.stop()
+
+    # 2. Display previous chat messages from memory
+    for msg in st.session_state['chat_history']:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+    # 3. The Chat Input box at the bottom of the screen
+    if user_prompt := st.chat_input("Ask me to analyze your IC50 data, explain Monod kinetics, or write a conclusion..."):
+        
+        # Display user's message instantly
+        with st.chat_message("user"):
+            st.markdown(user_prompt)
+        
+        # Save user message to memory
+        st.session_state['chat_history'].append({"role": "user", "content": user_prompt})
+        
+        # 4. Context Injection: Let the AI "see" the Global Memory Bank
+        system_context = "You are the BioSIGHT Global Copilot, an expert AI assistant in a high-throughput biotechnology software platform. "
+        
+        if not st.session_state['digitized_df'].empty:
+            df_string = st.session_state['digitized_df'].head(5).to_string() # Just send top 5 rows to save tokens
+            system_context += f"\n\nThe user currently has this digitized data loaded in the system's memory:\n{df_string}\n\n"
+        else:
+            system_context += "\n\nThe user currently has no raw data loaded in the global memory bank."
+            
+        system_context += f"User's query: {user_prompt}"
+
+        # 5. Generate AI Response
+        with st.chat_message("assistant"):
+            with st.spinner("Analyzing..."):
+                try:
+                    response = model.generate_content(system_context)
+                    st.markdown(response.text)
+                    
+                    # Save AI response to memory
+                    st.session_state['chat_history'].append({"role": "assistant", "content": response.text})
+                except Exception as e:
+                    st.error(f"Communication error with AI Engine: {e}")
