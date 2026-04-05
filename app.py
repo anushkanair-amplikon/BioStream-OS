@@ -172,6 +172,7 @@ app_mode = st.sidebar.radio(
 )
 st.sidebar.markdown("---")
 
+
 # ---------------------------------------------------------
 # ☁️ CLOUD ARCHIVE VIEW
 # ---------------------------------------------------------
@@ -233,7 +234,8 @@ with st.sidebar:
         "📊 Phenotypic & HCS Clustering",
         "⚙️ Enzyme Kinetics & Bioprocessing",
         "🧬 Epigenetic Array (DNA Methylation)",
-        "📸 Auto-Digitizer (Graph OCR)"
+        "📸 Auto-Digitizer (Graph OCR)",
+        "📈 Quality Control (SPC)"
     ])
     
     st.divider()
@@ -516,3 +518,70 @@ elif module == "🤖 BioSIGHT Global Copilot":
                     st.session_state['chat_history'].append({"role": "assistant", "content": response.text})
                 except Exception as e:
                     st.error(f"Communication error with AI Engine: {e}")
+    # ---------------------------------------------------------
+        # 📈 STATISTICAL PROCESS CONTROL (SPC) MODULE
+        # ---------------------------------------------------------
+        elif selected_module == "📈 Quality Control (SPC)":
+            st.title("📈 Statistical Process Control")
+            st.markdown("Monitor laboratory instrument calibration and assay drift using Levey-Jennings methodology.")
+            
+            # 1. Create realistic simulated QC data for the demo
+            # (In a real scenario, this would come from an uploaded CSV)
+            import numpy as np
+            import plotly.graph_objects as go
+            
+            st.info("💡 Loading 30-day historical control data for HPLC Instrument Alpha-01...")
+            
+            # Simulate 30 days of control runs (Mean = 100, SD = 5)
+            np.random.seed(42)
+            days = np.arange(1, 31)
+            qc_values = np.random.normal(loc=100, scale=5, size=30)
+            
+            # Inject an anomaly on day 28 to show the AI catching it!
+            qc_values[27] = 118 
+            
+            # 2. Calculate the Statistical Thresholds
+            mean_val = np.mean(qc_values)
+            sd_val = np.std(qc_values)
+            
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("Historical Mean", f"{mean_val:.2f}")
+            col2.metric("Standard Deviation (1σ)", f"{sd_val:.2f}")
+            col3.metric("Warning Limit (±2σ)", f"{(mean_val + 2*sd_val):.2f}")
+            col4.metric("Action Limit (±3σ)", f"{(mean_val + 3*sd_val):.2f}")
+            
+            # 3. Draw the Levey-Jennings Chart
+            fig = go.Figure()
+            
+            # Add the actual data points
+            fig.add_trace(go.Scatter(x=days, y=qc_values, mode='lines+markers', name='Daily QC Run', line=dict(color='#00d4ff')))
+            
+            # Add the Mean line (Green)
+            fig.add_hline(y=mean_val, line_dash="dash", line_color="#00ff00", annotation_text="Mean")
+            
+            # Add ±2 SD lines (Yellow - Warning)
+            fig.add_hline(y=mean_val + 2*sd_val, line_dash="dot", line_color="#ffff00", annotation_text="+2 SD")
+            fig.add_hline(y=mean_val - 2*sd_val, line_dash="dot", line_color="#ffff00", annotation_text="-2 SD")
+            
+            # Add ±3 SD lines (Red - Action Required)
+            fig.add_hline(y=mean_val + 3*sd_val, line_dash="solid", line_color="#ff0000", annotation_text="+3 SD (Action)")
+            fig.add_hline(y=mean_val - 3*sd_val, line_dash="solid", line_color="#ff0000", annotation_text="-3 SD (Action)")
+            
+            fig.update_layout(
+                title="Levey-Jennings Control Chart",
+                xaxis_title="Run Number (Days)",
+                yaxis_title="Assay Control Value",
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                font=dict(color='white')
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # 4. Automated Anomaly Detection
+            st.subheader("⚠️ System Alerts")
+            outliers = np.where(qc_values > (mean_val + 3*sd_val))[0]
+            if len(outliers) > 0:
+                st.error(f"🚨 CRITICAL DEVIATION DETECTED: Run {outliers[0] + 1} exceeds +3 SD limit. Possible reagent degradation or calibration failure. Instrument locked pending maintenance.")
+            else:
+                st.success("✅ All systems operating within normal parameters.")
