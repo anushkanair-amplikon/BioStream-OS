@@ -277,7 +277,7 @@ if module == "🛸 Universal Telemetry Dashboard":
 elif module == "💊 Bioactivity & Pharmacodynamics (IC50/Kd)":
     st.title("Receptor Binding & IC50 Profiling")
     
-    has_memory = not st.session_state['digitized_df'].empty
+    has_memory = not st.session_state.get('digitized_df', pd.DataFrame()).empty
     use_memory = st.toggle("📥 Pull Data from Global Memory Bank (Digitizer)", disabled=not has_memory)
     
     if use_memory and has_memory:
@@ -285,6 +285,13 @@ elif module == "💊 Bioactivity & Pharmacodynamics (IC50/Kd)":
         df_pk = st.session_state['digitized_df'].copy()
         df_pk = df_pk.rename(columns={'Extracted_X': 'Concentration_uM', 'Extracted_Y': 'Inhibition'})
         df_pk['Concentration_uM'] = df_pk['Concentration_uM'].apply(lambda x: max(x, 1e-5)) 
+        
+    # ✨ NEW: Check for uploaded CSV data!
+    elif 'active_dataset' in st.session_state:
+        st.success("🟢 Analyzing live uploaded dataset!")
+        df_pk = st.session_state['active_dataset']
+        # The app expects your CSV to have columns named 'Concentration_uM' and 'Inhibition'
+        
     else:
         st.caption("Using Live Internship Data (Amplikon Dataset)")
         conc = np.array([0.001, 0.01, 0.1, 0.5, 1.0, 5.0, 10.0, 50.0, 100.0])
@@ -356,16 +363,19 @@ elif module == "💊 Bioactivity & Pharmacodynamics (IC50/Kd)":
 
 elif module == "🧪 Multi-Spectral Suite (HPLC/GC-MS/UV-Vis)":
     st.title("Chromatographic Deconvolution & Peak Integration")
-    rt = np.linspace(0, 30, 2000)
-    signal = (45 * np.exp(-((rt - 5.2)**2)/0.08) + 120 * np.exp(-((rt - 12.5)**2)/0.15) + 
-              85 * np.exp(-((rt - 13.1)**2)/0.12) + 60 * np.exp(-((rt - 22.8)**2)/0.3)) + np.random.normal(0, 1.5, 2000) + 10
     
-    engine = SpectralEngine()
-    clean_signal, peaks, df_peaks = engine.process_chromatogram(rt, signal)
-    
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=rt, y=signal, name="Raw Signal", line=dict(color='#444444', width=1), opacity=0.5))
-    fig.add_trace(go.Scatter(x=rt, y=clean_signal, name="Processed Signal", line=dict(color='#00d4ff', width=2)))
+    # ✨ NEW: Check for uploaded CSV data!
+    if 'active_dataset' in st.session_state:
+        st.success("🟢 Analyzing live uploaded HPLC dataset!")
+        df_spec = st.session_state['active_dataset']
+        # The app expects your CSV to have columns named 'Retention_Time' and 'Intensity'
+        rt = df_spec['Retention_Time'].values
+        signal = df_spec['Intensity'].values
+    else:
+        st.warning("🟡 No HPLC data uploaded. Using simulated trace.")
+        rt = np.linspace(0, 30, 2000)
+        signal = (45 * np.exp(-((rt - 5.2)*2)/0.08) + 120 * np.exp(-((rt - 12.5)*2)/0.15) + 
+                  85 * np.exp(-((rt - 13.1)*2)/0.12) + 60 * np.exp(-((rt - 22.8)*2)/0.3)) + np.random.normal(0, 1.5, 2000) + 10
     
     if not df_peaks.empty:
         fig.add_trace(go.Scatter(x=df_peaks['Retention_Time'], y=df_peaks['Intensity'], mode='markers+text', 
@@ -379,14 +389,21 @@ elif module == "🧪 Multi-Spectral Suite (HPLC/GC-MS/UV-Vis)":
 
 elif module == "📊 Phenotypic & HCS Clustering":
     st.title("High-Content Screening (HCS) & Unsupervised Clustering")
-    np.random.seed(42)
-    df_pheno = pd.DataFrame({
-        'Compound_ID': [f"AMP-{i:03d}" for i in range(300)],
-        'Cell_Viability': np.concatenate([np.random.normal(90, 5, 100), np.random.normal(40, 10, 100), np.random.normal(85, 8, 100)]),
-        'Apoptosis_Rate': np.concatenate([np.random.normal(5, 2, 100), np.random.normal(55, 15, 100), np.random.normal(10, 5, 100)]),
-        'ROS_Production': np.concatenate([np.random.normal(20, 10, 100), np.random.normal(80, 20, 100), np.random.normal(30, 10, 100)]),
-        'Morphology_Score': np.concatenate([np.random.normal(0.9, 0.1, 100), np.random.normal(0.3, 0.15, 100), np.random.normal(0.8, 0.1, 100)])
-    })
+    
+    # ✨ NEW: Check for uploaded CSV data!
+    if 'active_dataset' in st.session_state:
+        st.success("🟢 Analyzing live uploaded HCS dataset!")
+        df_pheno = st.session_state['active_dataset']
+    else:
+        st.warning("🟡 No file uploaded. Using simulated demo data.")
+        np.random.seed(42)
+        df_pheno = pd.DataFrame({
+            'Compound_ID': [f"AMP-{i:03d}" for i in range(300)],
+            'Cell_Viability': np.concatenate([np.random.normal(90, 5, 100), np.random.normal(40, 10, 100), np.random.normal(85, 8, 100)]),
+            'Apoptosis_Rate': np.concatenate([np.random.normal(5, 2, 100), np.random.normal(55, 15, 100), np.random.normal(10, 5, 100)]),
+            'ROS_Production': np.concatenate([np.random.normal(20, 10, 100), np.random.normal(80, 20, 100), np.random.normal(30, 10, 100)]),
+            'Morphology_Score': np.concatenate([np.random.normal(0.9, 0.1, 100), np.random.normal(0.3, 0.15, 100), np.random.normal(0.8, 0.1, 100)])
+        })
     
     engine = PhenotypicEngine()
     df_analyzed, variance = engine.analyze_phenotypes(df_pheno, ['Cell_Viability', 'Apoptosis_Rate', 'ROS_Production', 'Morphology_Score'])
@@ -408,70 +425,75 @@ elif module == "⚙️ Enzyme Kinetics & Bioprocessing":
     with col2:
         engine = BioprocessEngine()
         df_kinetics = engine.simulate_fermentation(t_max, 1.0, [0.5, 50.0, 0.0], {'mu_max': mu_max, 'Ks': Ks, 'Yxs': Yxs, 'alpha': 0.1, 'beta': 0.05})
+        
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=df_kinetics['Time_Hours'], y=df_kinetics['Biomass_gL'], name="Biomass (g/L)", line=dict(color='#00d4ff')))
-        fig.add_trace(go.Scatter(x=df_kinetics['Time_Hours'], y=df_kinetics['Substrate_gL'], name="Substrate (g/L)", line=dict(color='#ff00d4', dash='dot')))
+        fig.add_trace(go.Scatter(x=df_kinetics['Time_Hours'], y=df_kinetics['Biomass_gL'], name="Simulated Biomass", line=dict(color='#00d4ff')))
+        fig.add_trace(go.Scatter(x=df_kinetics['Time_Hours'], y=df_kinetics['Substrate_gL'], name="Simulated Substrate", line=dict(color='#ff00d4', dash='dot')))
+        
+        # ✨ NEW: Check for uploaded CSV data to overlay!
+        if 'active_dataset' in st.session_state:
+            st.success("🟢 Overlaying live bioreactor historical data!")
+            df_bio = st.session_state['active_dataset']
+            # Plot the actual lab data as dots over the simulated lines
+            if 'Time_Hours' in df_bio.columns and 'Actual_Biomass' in df_bio.columns:
+                fig.add_trace(go.Scatter(x=df_bio['Time_Hours'], y=df_bio['Actual_Biomass'], mode='markers', name='Actual Lab Biomass', marker=dict(color='#00ff00', size=8)))
+        else:
+            st.warning("🟡 No historical data uploaded. Showing theoretical simulation only.")
+
         st.plotly_chart(fig, use_container_width=True)
 
 elif module == "🧬 Epigenetic Array (DNA Methylation)":
     st.title("Epigenomic Profiling & Aging Biomarkers")
-    analyzer = EpigeneticAnalyzer()
-    df_meth = analyzer.generate_methylation_profile()
+    
+    # ✨ NEW: Check for uploaded CSV data!
+    if 'active_dataset' in st.session_state:
+        st.success("🟢 Analyzing live Methylation dataset!")
+        df_meth = st.session_state['active_dataset']
+    else:
+        st.warning("🟡 No DNA data uploaded. Using simulated epigenetic profile.")
+        analyzer = EpigeneticAnalyzer()
+        df_meth = analyzer.generate_methylation_profile()
     
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=df_meth['Locus'], y=df_meth['CpG_Beta'], mode='lines', name='CpG Methylation', line=dict(color='#00d4ff', width=2)))
     fig.add_trace(go.Scatter(x=df_meth['Locus'], y=df_meth['Non_CpG_Beta'], mode='lines', fill='tozeroy', name='Non-CpG Methylation', line=dict(color='#ff00d4', width=2)))
     st.plotly_chart(fig, use_container_width=True)
-
-elif module == "📸 Auto-Digitizer (Graph OCR)":
-    st.title("Computer Vision: Graph to CSV")
-    st.info("Upload literature graphs (Image or PDF) to extract raw coordinates.")
-    
-    img_file = st.file_uploader("Upload Graph File", type=['png', 'jpg', 'jpeg', 'pdf'])
-    
-    if img_file:
-        if img_file.name.lower().endswith('.pdf'):
-            st.success("📄 PDF Document Detected. The vision engine will scan the first page.")
-        else:
-            st.image(img_file, width=600, caption="Uploaded Original Graph")
             
-        # --- NEW: Computer Vision Tuning Controls ---
-        with st.expander("⚙️ Advanced Vision Engine Tuning", expanded=True):
-            st.markdown("Adjust these filters if the engine misses points or captures noise (like text/gridlines).")
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                ui_min_area = st.slider("Minimum Point Size", 1, 50, 10) # Lowered default to 10
-            with c2:
-                ui_max_area = st.slider("Maximum Point Size", 100, 1000, 500)
-            with c3:
-                # Lowered circularity default to 0.2 to allow for error bars and odd shapes
-                ui_circularity = st.slider("Shape Strictness (Circularity)", 0.0, 1.0, 0.2, 0.1) 
-        
-        if st.button("Initialize Vision Pipeline", use_container_width=True):
-            with st.spinner("Running OpenCV Contours & Tesseract OCR..."):
-                digitizer = GraphDigitizer(img_file)
+    # --- NEW: Computer Vision Tuning Controls ---
+    with st.expander("⚙️ Advanced Vision Engine Tuning", expanded=True):
+        st.markdown("Adjust these filters if the engine misses points or captures noise (like text/gridlines).")
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            ui_min_area = st.slider("Minimum Point Size", 1, 50, 10) 
+        with c2:
+            ui_max_area = st.slider("Maximum Point Size", 100, 1000, 500)
+        with c3:
+            ui_circularity = st.slider("Shape Strictness (Circularity)", 0.0, 1.0, 0.2, 0.1) 
+    
+    if st.button("Initialize Vision Pipeline", use_container_width=True):
+        with st.spinner("Running OpenCV Contours & Tesseract OCR..."):
+            digitizer = GraphDigitizer(img_file)
+            
+            # Pass the UI slider values into the engine
+            extracted_df, context_text = digitizer.process_full_pipeline()
+            
+            # Manually do the pipeline steps here to use the slider values
+            pixels = digitizer.isolate_data_points(min_area=ui_min_area, max_area=ui_max_area, min_circularity=ui_circularity)
+            extracted_df = digitizer.map_to_real_data(pixels)
+            
+            if not extracted_df.empty:
+                st.session_state['digitized_df'] = extracted_df
+                st.success(f"Successfully digitized {len(extracted_df)} data points.")
+                st.info("💾 Data routed to Global Memory Bank. You can now use this in the Pharmacodynamics module.")
                 
-                # Pass the UI slider values into the engine
-                extracted_df, context_text = digitizer.process_full_pipeline()
-                
-                # We need to override the isolate_data_points call inside process_full_pipeline
-                # So we manually do the pipeline steps here to use the slider values
-                pixels = digitizer.isolate_data_points(min_area=ui_min_area, max_area=ui_max_area, min_circularity=ui_circularity)
-                extracted_df = digitizer.map_to_real_data(pixels)
-                
-                if not extracted_df.empty:
-                    st.session_state['digitized_df'] = extracted_df
-                    st.success(f"Successfully digitized {len(extracted_df)} data points.")
-                    st.info("💾 Data routed to Global Memory Bank. You can now use this in the Pharmacodynamics module.")
-                    
-                    col1, col2 = st.columns([2, 1])
-                    with col1:
-                        fig = px.scatter(extracted_df, x='Extracted_X', y='Extracted_Y', title="Digitized Data Reconstruction")
-                        st.plotly_chart(fig, use_container_width=True)
-                    with col2:
-                        st.dataframe(extracted_df, use_container_width=True)
-                else:
-                    st.error("Could not detect confident data points. Try lowering 'Minimum Point Size' and 'Shape Strictness' in the Advanced Tuning menu.")
+                col1, col2 = st.columns([2, 1])
+                with col1:
+                    fig = px.scatter(extracted_df, x='Extracted_X', y='Extracted_Y', title="Digitized Data Reconstruction")
+                    st.plotly_chart(fig, use_container_width=True)
+                with col2:
+                    st.dataframe(extracted_df, use_container_width=True)
+            else:
+                st.error("Could not detect confident data points. Try lowering 'Minimum Point Size' and 'Shape Strictness' in the Advanced Tuning menu.")
                     
 elif module == "🤖 BioSIGHT Global Copilot":
     st.title("BioSIGHT Global Copilot")
@@ -504,7 +526,7 @@ elif module == "🤖 BioSIGHT Global Copilot":
         system_context = "You are the BioSIGHT Global Copilot, an expert AI assistant in a high-throughput biotechnology software platform. "
         
         if not st.session_state['digitized_df'].empty:
-            df_string = st.session_state['digitized_df'].head(5).to_string() # Just send top 5 rows to save tokens
+            df_string = st.session_state['digitized_df'].head(5).to_string() 
             system_context += f"\n\nThe user currently has this digitized data loaded in the system's memory:\n{df_string}\n\n"
         else:
             system_context += "\n\nThe user currently has no raw data loaded in the global memory bank."
@@ -517,75 +539,72 @@ elif module == "🤖 BioSIGHT Global Copilot":
                 try:
                     response = model.generate_content(system_context)
                     st.markdown(response.text)
-                    
-                    # Save AI response to memory
                     st.session_state['chat_history'].append({"role": "assistant", "content": response.text})
                 except Exception as e:
                     st.error(f"Communication error with AI Engine: {e}")
-# ---------------------------------------------------------
-        # 📈 STATISTICAL PROCESS CONTROL (SPC) MODULE
-        # ---------------------------------------------------------
+
 elif module == "📈 Quality Control (SPC)":
     st.title("📈 Statistical Process Control")
     st.markdown("Monitor laboratory instrument calibration and assay drift using Levey-Jennings methodology.")
+    
+    import numpy as np
+    import plotly.graph_objects as go
+    
+    # ✨ NEW: Check for uploaded CSV data!
+    if 'active_dataset' in st.session_state:
+        st.success("🟢 Analyzing live QC tracking data!")
+        df_qc = st.session_state['active_dataset']
+        days = df_qc['Run_Day'].values
+        qc_values = df_qc['Control_Value'].values
+    else:
+        st.info("💡 Loading 30-day historical control data for HPLC Instrument Alpha-01...")
+        np.random.seed(42)
+        days = np.arange(1, 31)
+        qc_values = np.random.normal(loc=100, scale=5, size=30)
+        qc_values[27] = 118 
             
-            # 1. Create realistic simulated QC data for the demo
-            # (In a real scenario, this would come from an uploaded CSV)
-import numpy as np
-import plotly.graph_objects as go
+    # 2. Calculate the Statistical Thresholds
+    mean_val = np.mean(qc_values)
+    sd_val = np.std(qc_values)
             
-st.info("💡 Loading 30-day historical control data for HPLC Instrument Alpha-01...")
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Historical Mean", f"{mean_val:.2f}")
+    col2.metric("Standard Deviation (1σ)", f"{sd_val:.2f}")
+    col3.metric("Warning Limit (±2σ)", f"{(mean_val + 2*sd_val):.2f}")
+    col4.metric("Action Limit (±3σ)", f"{(mean_val + 3*sd_val):.2f}")
             
-            # Simulate 30 days of control runs (Mean = 100, SD = 5)
-np.random.seed(42)
-days = np.arange(1, 31)
-qc_values = np.random.normal(loc=100, scale=5, size=30)
+    # 3. Draw the Levey-Jennings Chart
+    fig = go.Figure()
             
-            # Inject an anomaly on day 28 to show the AI catching it!
-qc_values[27] = 118 
+    # Add the actual data points
+    fig.add_trace(go.Scatter(x=days, y=qc_values, mode='lines+markers', name='Daily QC Run', line=dict(color='#00d4ff')))
             
-            # 2. Calculate the Statistical Thresholds
-mean_val = np.mean(qc_values)
-sd_val = np.std(qc_values)
+    # Add the Mean line (Green)
+    fig.add_hline(y=mean_val, line_dash="dash", line_color="#00ff00", annotation_text="Mean")
             
-col1, col2, col3, col4 = st.columns(4)
-col1.metric("Historical Mean", f"{mean_val:.2f}")
-col2.metric("Standard Deviation (1σ)", f"{sd_val:.2f}")
-col3.metric("Warning Limit (±2σ)", f"{(mean_val + 2*sd_val):.2f}")
-col4.metric("Action Limit (±3σ)", f"{(mean_val + 3*sd_val):.2f}")
+    # Add ±2 SD lines (Yellow - Warning)
+    fig.add_hline(y=mean_val + 2*sd_val, line_dash="dot", line_color="#ffff00", annotation_text="+2 SD")
+    fig.add_hline(y=mean_val - 2*sd_val, line_dash="dot", line_color="#ffff00", annotation_text="-2 SD")
             
-            # 3. Draw the Levey-Jennings Chart
-fig = go.Figure()
+    # Add ±3 SD lines (Red - Action Required)
+    fig.add_hline(y=mean_val + 3*sd_val, line_dash="solid", line_color="#ff0000", annotation_text="+3 SD (Action)")
+    fig.add_hline(y=mean_val - 3*sd_val, line_dash="solid", line_color="#ff0000", annotation_text="-3 SD (Action)")
             
-            # Add the actual data points
-fig.add_trace(go.Scatter(x=days, y=qc_values, mode='lines+markers', name='Daily QC Run', line=dict(color='#00d4ff')))
+    fig.update_layout(
+        title="Levey-Jennings Control Chart",
+        xaxis_title="Run Number (Days)",
+        yaxis_title="Assay Control Value",
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        font=dict(color='white')
+    )
             
-            # Add the Mean line (Green)
-fig.add_hline(y=mean_val, line_dash="dash", line_color="#00ff00", annotation_text="Mean")
+    st.plotly_chart(fig, use_container_width=True)
             
-            # Add ±2 SD lines (Yellow - Warning)
-fig.add_hline(y=mean_val + 2*sd_val, line_dash="dot", line_color="#ffff00", annotation_text="+2 SD")
-fig.add_hline(y=mean_val - 2*sd_val, line_dash="dot", line_color="#ffff00", annotation_text="-2 SD")
-            
-            # Add ±3 SD lines (Red - Action Required)
-fig.add_hline(y=mean_val + 3*sd_val, line_dash="solid", line_color="#ff0000", annotation_text="+3 SD (Action)")
-fig.add_hline(y=mean_val - 3*sd_val, line_dash="solid", line_color="#ff0000", annotation_text="-3 SD (Action)")
-            
-fig.update_layout(
-    title="Levey-Jennings Control Chart",
-    xaxis_title="Run Number (Days)",
-    yaxis_title="Assay Control Value",
-    plot_bgcolor='rgba(0,0,0,0)',
-    paper_bgcolor='rgba(0,0,0,0)',
-    font=dict(color='white')
- )
-            
-st.plotly_chart(fig, use_container_width=True)
-            
-            # 4. Automated Anomaly Detection
-st.subheader("⚠️ System Alerts")
-outliers = np.where(qc_values > (mean_val + 3*sd_val))[0]
-if len(outliers) > 0:
-    st.error(f"🚨 CRITICAL DEVIATION DETECTED: Run {outliers[0] + 1} exceeds +3 SD limit. Possible reagent degradation or calibration failure. Instrument locked pending maintenance.")
-else:
-    st.success("✅ All systems operating within normal parameters.")
+    # 4. Automated Anomaly Detection
+    st.subheader("⚠️ System Alerts")
+    outliers = np.where(qc_values > (mean_val + 3*sd_val))[0]
+    if len(outliers) > 0:
+        st.error(f"🚨 CRITICAL DEVIATION DETECTED: Run {outliers[0] + 1} exceeds +3 SD limit. Possible reagent degradation or calibration failure. Instrument locked pending maintenance.")
+    else:
+        st.success("✅ All systems operating within normal parameters.")
