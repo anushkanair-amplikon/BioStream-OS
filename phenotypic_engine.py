@@ -23,6 +23,8 @@ class PhenotypicEngine:
         x_scaled = scaler.fit_transform(x)
         
         # 3. Dimensionality Reduction (PCA) for 2D visualization
+        from sklearn.decomposition import PCA
+        self.pca = PCA(n_components=2)
         components = self.pca.fit_transform(x_scaled)
         df['PCA1'] = components[:, 0]
         df['PCA2'] = components[:, 1]
