@@ -30,7 +30,9 @@ class PhenotypicEngine:
         df['PCA2'] = components[:, 1]
         
         # 4. Unsupervised Clustering (K-Means) on the scaled data
-        df['Cluster_ID'] = self.kmeans.fit_predict(x_scaled)
+        from sklearn.cluster import KMeans
+        kmeans = KMeans(n_clusters=3, random_state=42)
+        df['Cluster_ID'] = kmeans.fit_predict(x_scaled)
         df['Cluster_ID'] = "Phenotype Profile " + df['Cluster_ID'].astype(str)
         
         explained_var = self.pca.explained_variance_ratio_ * 100
