@@ -264,7 +264,7 @@ elif module == "🧪 Multi-Spectral Suite (HPLC/GC-MS/UV-Vis)":
     
     if not df_peaks.empty:
         fig.add_trace(go.Scatter(x=df_peaks['Retention_Time'], y=df_peaks['Intensity'], mode='markers+text', 
-                                 name="Detected Peaks", marker=dict(color='#ff00d4', size=10, symbol='inv-triangle'),
+                                 name="Detected Peaks", marker=dict(color='#ff00d4', size=10, symbol='triangle-down'),
                                  text=df_peaks['Peak_ID'], textposition="top center"))
         
     fig.update_layout(title="HPLC Trace: Peak Detection", xaxis_title="Retention Time (min)", yaxis_title="Intensity")
