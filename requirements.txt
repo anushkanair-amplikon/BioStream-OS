@@ -9,3 +9,4 @@ pytesseract
 PyMuPDF
 fpdf2
 Pillow
+google-generativeai
