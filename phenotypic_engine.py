@@ -1,13 +1,10 @@
 import pandas as pd
-import numpy as np
-from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler # Make sure this import is here!
 
 class PhenotypicEngine:
-    def _init_(self, n_clusters=4):
-        self.n_clusters = n_clusters
-        self.scaler = StandardScaler()
+    def _init_(self):
+        self.scaler = StandardScaler() # <--- THIS IS THE MISSING LINE
         self.pca = PCA(n_components=2)
         # Using n_init='auto' to suppress warnings in newer scikit-learn versions
         self.kmeans = KMeans(n_clusters=self.n_clusters, random_state=42, n_init='auto')
