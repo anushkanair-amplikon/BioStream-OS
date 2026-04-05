@@ -18,7 +18,9 @@ class PhenotypicEngine:
         x = df[feature_columns].values
         
         # 2. Standardize the data (mean=0, variance=1)
-        x_scaled = self.scaler.fit_transform(x)
+        from sklearn.preprocessing import StandardScaler
+        scaler = StandardScaler()
+        x_scaled = scaler.fit_transform(x)
         
         # 3. Dimensionality Reduction (PCA) for 2D visualization
         components = self.pca.fit_transform(x_scaled)
