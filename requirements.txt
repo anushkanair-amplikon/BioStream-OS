@@ -10,3 +10,4 @@ PyMuPDF
 fpdf2
 Pillow
 google-generativeai
+supabase
