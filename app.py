@@ -109,6 +109,39 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
+# 1.1 ENTERPRISE SECURITY (LOGIN GATE)
+# ---------------------------------------------------------
+# Initialize login state
+if 'logged_in' not in st.session_state:
+    st.session_state['logged_in'] = False
+
+# The Bouncer
+if not st.session_state['logged_in']:
+    # Create a sleek, centered login box
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col2:
+        st.markdown("<br><br><br>", unsafe_allow_html=True)
+        st.markdown("<h2 style='text-align: center; color: #00d4ff;'>🧬 BioStream OS</h2>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center;'>Authorized Amplikon Personnel Only</p>", unsafe_allow_html=True)
+        
+        # Input fields
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password") # Hides the text as dots
+        
+        if st.button("Initialize System", use_container_width=True):
+            # Check against your secrets.toml file
+            if username == st.secrets["credentials"]["admin_username"] and password == st.secrets["credentials"]["admin_password"]:
+                st.session_state['logged_in'] = True
+                st.rerun() # Refreshes the page to show the main app
+            else:
+                st.error("Authentication Failed. Access Denied.")
+    
+    # 🔥 CRITICAL: This stops the rest of your app from loading!
+    st.stop() 
+
+
+# ---------------------------------------------------------
 # 1.5 GLOBAL MEMORY BANK (State Management)
 # ---------------------------------------------------------
 if 'digitized_df' not in st.session_state:
