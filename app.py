@@ -222,7 +222,7 @@ elif module == "💊 Bioactivity & Pharmacodynamics (IC50/Kd)":
                     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
                     
                     # 2. Load the lightweight, fast model
-                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    model = genai.GenerativeModel('gemini-2.5-flash')
                     
                     # 3. Construct the "System Prompt"
                     # We inject your live mathematical results directly into the prompt
@@ -283,7 +283,7 @@ elif module == "📊 Phenotypic & HCS Clustering":
         'Morphology_Score': np.concatenate([np.random.normal(0.9, 0.1, 100), np.random.normal(0.3, 0.15, 100), np.random.normal(0.8, 0.1, 100)])
     })
     
-    engine = PhenotypicEngine(n_clusters=3)
+    engine = PhenotypicEngine()
     df_analyzed, variance = engine.analyze_phenotypes(df_pheno, ['Cell_Viability', 'Apoptosis_Rate', 'ROS_Production', 'Morphology_Score'])
     
     fig = px.scatter(df_analyzed, x='PCA1', y='PCA2', color='Cluster_ID', hover_data=['Compound_ID'],
@@ -375,7 +375,7 @@ elif module == "🤖 BioSIGHT Global Copilot":
     # 1. Configure the Gemini Engine securely
     try:
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-2.5-flash')
     except Exception as e:
         st.error(f"API Key Error: {e}. Ensure secrets.toml is configured.")
         st.stop()
@@ -417,4 +417,3 @@ elif module == "🤖 BioSIGHT Global Copilot":
                     st.session_state['chat_history'].append({"role": "assistant", "content": response.text})
                 except Exception as e:
                     st.error(f"Communication error with AI Engine: {e}")
-                    
