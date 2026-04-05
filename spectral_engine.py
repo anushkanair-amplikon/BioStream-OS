@@ -16,7 +16,7 @@ class SpectralEngine:
     def process_chromatogram(self, rt, signal, prominence=10):
         """Smooths signal, detects peaks, and calculates AUC."""
         # Smooth and correct
-        y_smooth = savgol_filter(signal, self.window_length, self.polyorder)
+        y_smooth = savgol_filter(signal, window_length=11, polyorder=3)
         y_corrected = self.baseline_correction(y_smooth)
         
         # Detect peaks and peak widths
