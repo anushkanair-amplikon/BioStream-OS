@@ -417,3 +417,4 @@ elif module == "🤖 BioSIGHT Global Copilot":
                     st.session_state['chat_history'].append({"role": "assistant", "content": response.text})
                 except Exception as e:
                     st.error(f"Communication error with AI Engine: {e}")
+                    
