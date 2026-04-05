@@ -253,7 +253,11 @@ with st.sidebar:
                 df_uploaded = pd.read_csv(uploaded_file, sep=None, engine='python')
             elif file_extension == 'xlsx':
                 df_uploaded = pd.read_excel(uploaded_file)
-            st.success(f"Successfully loaded {uploaded_file.name}!")
+            
+            # ✨ THE FIX: Save the data into the app's global memory!
+            st.session_state['active_dataset'] = df_uploaded
+            
+            st.success(f"Successfully loaded {uploaded_file.name} into Active Memory!")
         except Exception as e:
             st.error(f"Error reading file: {e}")
 
