@@ -115,6 +115,20 @@ def init_connection():
     return create_client(st.secrets["supabase"]["URL"], st.secrets["supabase"]["KEY"])
 supabase = init_connection()
 
+# ✨ NEW: The Master Cloud Sync Engine ✨
+def upload_to_supabase(module_name, metrics_dict, ai_text="No AI summary generated."):
+    """Helper function to push data into the Supabase experiment_logs table."""
+    try:
+        data, count = supabase.table("experiment_logs").insert({
+            "module_name": module_name,
+            "metrics": str(metrics_dict),
+            "ai_summary": ai_text
+        }).execute()
+        return True
+    except Exception as e:
+        st.error(f"Cloud Sync Failed: {e}")
+        return False
+
 # ---------------------------------------------------------
 # 1.5 GLOBAL MEMORY BANK
 # ---------------------------------------------------------
@@ -165,13 +179,11 @@ with st.sidebar:
     st.divider()
     st.subheader("Data Ingestion")
     
-    # ✨ ADVANCED MULTI-FILE UPLOAD & POOLING ✨
     uploaded_files = st.file_uploader("Upload Raw Data (Up to 10 files)", type=["csv", "xlsx", "txt", "tsv"], accept_multiple_files=True)
     
     if uploaded_files:
         if len(uploaded_files) > 10: uploaded_files = uploaded_files[:10]
             
-        # Rebuild data pool
         st.session_state['data_pool'] = {}
         for f in uploaded_files:
             try:
@@ -204,7 +216,6 @@ if module == "🛸 Universal Telemetry Dashboard":
     c3.metric("Data Integrity", "99.9% (ALCOA+)")
     c4.metric("Scopus-Ready Exports", "Enabled")
     
-    # ✨ DATA HARMONIZATION ENGINE ✨
     if 'data_pool' in st.session_state and len(st.session_state['data_pool']) > 0:
         st.divider()
         st.markdown("### 🗄️ Global Data Harmonization")
@@ -318,6 +329,16 @@ elif module == "💊 Bioactivity & Pharmacodynamics (IC50/Kd)":
                     response = model.generate_content(f"Analyze IC50: {results['ic50']}uM, Hill: {results['hill']}, R2: {results['r2']}. Keep it to 3 scientific sentences.")
                     st.info(response.text)
                 except Exception as e: st.error(f"AI Engine Error: {e}")
+                
+        # ✨ NEW: Cloud Sync Button ✨
+        st.divider()
+        st.subheader("☁️ Enterprise Cloud Sync")
+        if st.button("💾 Save Results to Secure Cloud", use_container_width=True, key="ic50_save"):
+            with st.spinner("Encrypting and transmitting to Supabase..."):
+                metrics_data = {"Calculated_IC50_uM": round(results['ic50'], 3), "Hill_Slope": round(results['hill'], 2), "Confidence_R2": round(results['r2'], 4)}
+                success = upload_to_supabase("Bioactivity & Pharmacodynamics (IC50)", metrics_data)
+                if success: st.success("✅ Run archived successfully! Switch to the 'Cloud Archive' view to see it.")
+                
     else:
         st.error("Curve fitting failed. The data may not follow a standard dose-response curve.")
 
@@ -358,6 +379,15 @@ elif module == "🧪 Multi-Spectral Suite (HPLC/GC-MS/UV-Vis)":
         fig.add_trace(go.Scatter(x=df_peaks['Retention_Time'], y=df_peaks['Intensity'], mode='markers+text', name="Detected Peaks", marker=dict(color='#ff00d4', size=10, symbol='triangle-down'), text=df_peaks['Peak_ID'], textposition="top center"))
     fig.update_layout(title="HPLC Trace: Peak Detection", xaxis_title="Retention Time (min)", yaxis_title="Intensity")
     st.plotly_chart(fig, use_container_width=True)
+    
+    # ✨ NEW: Cloud Sync Button ✨
+    st.divider()
+    st.subheader("☁️ Enterprise Cloud Sync")
+    if st.button("💾 Save Results to Secure Cloud", use_container_width=True, key="hplc_save"):
+        with st.spinner("Encrypting and transmitting to Supabase..."):
+            metrics_data = {"Total_Peaks_Detected": len(df_peaks) if not df_peaks.empty else 0}
+            success = upload_to_supabase("Multi-Spectral Suite (HPLC)", metrics_data)
+            if success: st.success("✅ Run archived successfully! Switch to the 'Cloud Archive' view to see it.")
 
 elif module == "📊 Phenotypic & HCS Clustering":
     st.title("High-Content Screening (HCS) & Unsupervised Clustering")
@@ -394,6 +424,15 @@ elif module == "📊 Phenotypic & HCS Clustering":
     df_analyzed, variance = engine.analyze_phenotypes(df_pheno, ['Cell_Viability', 'Apoptosis_Rate', 'ROS_Production', 'Morphology_Score'])
     fig = px.scatter(df_analyzed, x='PCA1', y='PCA2', color='Cluster_ID', hover_data=['Compound_ID'], title=f"PCA Representation (Variance: {variance[0]:.1f}% + {variance[1]:.1f}%)", color_discrete_sequence=['#00d4ff', '#ff00d4', '#ffdd00'])
     st.plotly_chart(fig, use_container_width=True)
+    
+    # ✨ NEW: Cloud Sync Button ✨
+    st.divider()
+    st.subheader("☁️ Enterprise Cloud Sync")
+    if st.button("💾 Save Results to Secure Cloud", use_container_width=True, key="cluster_save"):
+        with st.spinner("Encrypting and transmitting to Supabase..."):
+            metrics_data = {"Total_Compounds_Clustered": len(df_analyzed), "PCA_Variance_Retained": round(variance[0] + variance[1], 1)}
+            success = upload_to_supabase("Phenotypic & HCS Clustering", metrics_data)
+            if success: st.success("✅ Run archived successfully! Switch to the 'Cloud Archive' view to see it.")
 
 elif module == "⚙️ Enzyme Kinetics & Bioprocessing":
     st.title("Industrial Bioprocessing & Fermentation Dynamics")
@@ -426,6 +465,15 @@ elif module == "⚙️ Enzyme Kinetics & Bioprocessing":
             df_bio = df_bio.dropna()
             fig.add_trace(go.Scatter(x=df_bio['Time_Hours'], y=df_bio['Actual_Biomass'], mode='markers', name='Actual Lab Biomass', marker=dict(color='#00ff00', size=8)))
         st.plotly_chart(fig, use_container_width=True)
+        
+        # ✨ NEW: Cloud Sync Button ✨
+        st.divider()
+        st.subheader("☁️ Enterprise Cloud Sync")
+        if st.button("💾 Save Results to Secure Cloud", use_container_width=True, key="kinetics_save"):
+            with st.spinner("Encrypting and transmitting to Supabase..."):
+                metrics_data = {"Max_Growth_Rate": mu_max, "Half_Velocity_Const": Ks, "Biomass_Yield": Yxs, "Final_Biomass_gL": round(df_kinetics['Biomass_gL'].iloc[-1], 2)}
+                success = upload_to_supabase("Enzyme Kinetics & Bioprocessing", metrics_data)
+                if success: st.success("✅ Run archived successfully! Switch to the 'Cloud Archive' view to see it.")
 
 elif module == "🧬 Epigenetic Array (DNA Methylation)":
     st.title("Epigenomic Profiling & Aging Biomarkers")
@@ -453,6 +501,15 @@ elif module == "🧬 Epigenetic Array (DNA Methylation)":
     fig.add_trace(go.Scatter(x=df_meth['Locus'], y=df_meth['CpG_Beta'], mode='lines', name='CpG Methylation', line=dict(color='#00d4ff', width=2)))
     fig.add_trace(go.Scatter(x=df_meth['Locus'], y=df_meth['Non_CpG_Beta'], mode='lines', fill='tozeroy', name='Non-CpG Methylation', line=dict(color='#ff00d4', width=2)))
     st.plotly_chart(fig, use_container_width=True)
+    
+    # ✨ NEW: Cloud Sync Button ✨
+    st.divider()
+    st.subheader("☁️ Enterprise Cloud Sync")
+    if st.button("💾 Save Results to Secure Cloud", use_container_width=True, key="epi_save"):
+        with st.spinner("Encrypting and transmitting to Supabase..."):
+            metrics_data = {"Loci_Analyzed": len(df_meth), "Average_CpG_Beta": round(df_meth['CpG_Beta'].mean(), 3)}
+            success = upload_to_supabase("Epigenetic Array", metrics_data)
+            if success: st.success("✅ Run archived successfully! Switch to the 'Cloud Archive' view to see it.")
 
 elif module == "📸 Auto-Digitizer (Graph OCR)":
     st.title("Computer Vision: Graph to CSV")
@@ -540,3 +597,12 @@ elif module == "📈 Quality Control (SPC)":
     fig.add_hline(y=mean_val - 3*sd_val, line_dash="solid", line_color="#ff0000")
     fig.update_layout(title="Levey-Jennings Control Chart", plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font=dict(color='white'))
     st.plotly_chart(fig, use_container_width=True)
+    
+    # ✨ NEW: Cloud Sync Button ✨
+    st.divider()
+    st.subheader("☁️ Enterprise Cloud Sync")
+    if st.button("💾 Save Results to Secure Cloud", use_container_width=True, key="qc_save"):
+        with st.spinner("Encrypting and transmitting to Supabase..."):
+            metrics_data = {"Historical_Mean": round(mean_val, 2), "Standard_Deviation": round(sd_val, 2), "Anomalies_Detected": len(np.where(qc_values > (mean_val + 3*sd_val))[0]) + len(np.where(qc_values < (mean_val - 3*sd_val))[0])}
+            success = upload_to_supabase("Quality Control (SPC)", metrics_data)
+            if success: st.success("✅ Run archived successfully! Switch to the 'Cloud Archive' view to see it.")
