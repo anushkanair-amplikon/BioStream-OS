@@ -140,7 +140,8 @@ if not st.session_state['logged_in']:
     
     # 🔥 CRITICAL: This stops the rest of your app from loading!
     st.stop()
-    # =========================================================
+    
+# =========================================================
 # 1.2 CLOUD DATABASE CONNECTION (SUPABASE)
 # =========================================================
 @st.cache_resource 
@@ -149,8 +150,7 @@ def init_connection():
     key = st.secrets["supabase"]["KEY"]
     return create_client(url, key)
 
-supabase = init_connection() # <--- THIS IS THE VARIABLE THE ERROR IS LOOKING FOR!
-
+supabase = init_connection()
 
 # ---------------------------------------------------------
 # 1.5 GLOBAL MEMORY BANK (State Management)
@@ -158,7 +158,7 @@ supabase = init_connection() # <--- THIS IS THE VARIABLE THE ERROR IS LOOKING FO
 if 'digitized_df' not in st.session_state:
     st.session_state['digitized_df'] = pd.DataFrame()
 
-# NEW: Memory for the Global Copilot
+# Memory for the Global Copilot
 if 'chat_history' not in st.session_state:
     st.session_state['chat_history'] = []
 
@@ -228,7 +228,7 @@ with st.sidebar:
     
     module = st.radio("Intelligence Modules", [
         "🛸 Universal Telemetry Dashboard",
-        "🤖 BioSIGHT Global Copilot",  # <--- ADD THIS HERE
+        "🤖 BioSIGHT Global Copilot",
         "💊 Bioactivity & Pharmacodynamics (IC50/Kd)",
         "🧪 Multi-Spectral Suite (HPLC/GC-MS/UV-Vis)",
         "📊 Phenotypic & HCS Clustering",
@@ -276,6 +276,13 @@ if module == "🛸 Universal Telemetry Dashboard":
 
 elif module == "💊 Bioactivity & Pharmacodynamics (IC50/Kd)":
     st.title("Receptor Binding & IC50 Profiling")
+    with st.expander("ℹ️ Data Upload Instructions"):
+        st.markdown("""
+        To analyze custom data, upload a CSV or Excel file in the sidebar.
+        **Required Column Names (Case-Sensitive):**
+        * `Concentration_uM` (The drug concentration in micromolar)
+        * `Inhibition` (The percentage of receptor inhibition)
+        """)
     
     has_memory = not st.session_state.get('digitized_df', pd.DataFrame()).empty
     use_memory = st.toggle("📥 Pull Data from Global Memory Bank (Digitizer)", disabled=not has_memory)
@@ -286,11 +293,10 @@ elif module == "💊 Bioactivity & Pharmacodynamics (IC50/Kd)":
         df_pk = df_pk.rename(columns={'Extracted_X': 'Concentration_uM', 'Extracted_Y': 'Inhibition'})
         df_pk['Concentration_uM'] = df_pk['Concentration_uM'].apply(lambda x: max(x, 1e-5)) 
         
-    # ✨ NEW: Check for uploaded CSV data!
-    elif 'active_dataset' in st.session_state:
+    # ✨ SAFETY CHECK: Ensure file has the correct columns before using it!
+    elif 'active_dataset' in st.session_state and 'Concentration_uM' in st.session_state['active_dataset'].columns:
         st.success("🟢 Analyzing live uploaded dataset!")
         df_pk = st.session_state['active_dataset']
-        # The app expects your CSV to have columns named 'Concentration_uM' and 'Inhibition'
         
     else:
         st.caption("Using Live Internship Data (Amplikon Dataset)")
@@ -317,42 +323,27 @@ elif module == "💊 Bioactivity & Pharmacodynamics (IC50/Kd)":
         c2.metric("Hill Slope", f"{results['hill']:.2f}")
         c3.metric("Fit Confidence (R²)", f"{results['r2']:.4f}")
         
-        # --- NEW: Automated Executive Reporting ---
-        st.divider()
-        st.subheader("📄 Export Official Report")
-        
-        # ---------------------------------------------------------
-        # ✨ REAL AI ANALYST INTEGRATION (GEMINI)
-        # ---------------------------------------------------------
         st.divider()
         st.subheader("🤖 BioSIGHT Cognitive Analyst")
         
         if st.button("✨ Generate Live AI Analysis", use_container_width=True):
             with st.spinner("Connecting to LLM Neural Engine..."):
                 try:
-                    # 1. Authenticate with your secure key
                     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                    
-                    # 2. Load the lightweight, fast model
                     model = genai.GenerativeModel('gemini-2.5-flash')
                     
-                    # 3. Construct the "System Prompt"
-                    # We inject your live mathematical results directly into the prompt
                     ai_prompt = f"""
                     You are an expert computational biologist and lead pharmacologist at Amplikon Biosystems.
                     Analyze the following high-throughput screening data for a novel drug candidate:
-                    
                     - Calculated IC50: {results['ic50']:.3f} µM
                     - Hill Coefficient (Slope): {results['hill']:.2f}
                     - Regression Confidence (R²): {results['r2']:.4f}
-                    
                     Write a concise, highly professional 3-sentence scientific conclusion. 
                     State whether this compound exhibits strong, moderate, or weak potency. 
                     Conclude with a recommendation on whether it should advance to in-vivo clinical trials or requires chemical optimization.
                     Do not use markdown headers or fluff.
                     """
                     
-                    # 4. Fire the request to the AI and display the result
                     response = model.generate_content(ai_prompt)
                     st.info(response.text)
                     
@@ -363,19 +354,32 @@ elif module == "💊 Bioactivity & Pharmacodynamics (IC50/Kd)":
 
 elif module == "🧪 Multi-Spectral Suite (HPLC/GC-MS/UV-Vis)":
     st.title("Chromatographic Deconvolution & Peak Integration")
+    with st.expander("ℹ️ Data Upload Instructions"):
+        st.markdown("""
+        To process a live chromatogram, upload a CSV or Excel file in the sidebar.
+        **Required Column Names (Case-Sensitive):**
+        * `Retention_Time` (Time in minutes)
+        * `Intensity` (The raw detector signal/absorbance)
+        """)
     
-    # ✨ NEW: Check for uploaded CSV data!
-    if 'active_dataset' in st.session_state:
+    # ✨ SAFETY CHECK: Ensure file has the correct columns before using it!
+    if 'active_dataset' in st.session_state and 'Retention_Time' in st.session_state['active_dataset'].columns:
         st.success("🟢 Analyzing live uploaded HPLC dataset!")
         df_spec = st.session_state['active_dataset']
-        # The app expects your CSV to have columns named 'Retention_Time' and 'Intensity'
         rt = df_spec['Retention_Time'].values
         signal = df_spec['Intensity'].values
     else:
         st.warning("🟡 No HPLC data uploaded. Using simulated trace.")
         rt = np.linspace(0, 30, 2000)
-        signal = (45 * np.exp(-((rt - 5.2)*2)/0.08) + 120 * np.exp(-((rt - 12.5)*2)/0.15) + 
-                  85 * np.exp(-((rt - 13.1)*2)/0.12) + 60 * np.exp(-((rt - 22.8)*2)/0.3)) + np.random.normal(0, 1.5, 2000) + 10
+        signal = (45 * np.exp(-((rt - 5.2)**2)/0.08) + 120 * np.exp(-((rt - 12.5)**2)/0.15) + 
+                  85 * np.exp(-((rt - 13.1)**2)/0.12) + 60 * np.exp(-((rt - 22.8)**2)/0.3)) + np.random.normal(0, 1.5, 2000) + 10
+    
+    engine = SpectralEngine()
+    clean_signal, peaks, df_peaks = engine.process_chromatogram(rt, signal)
+    
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=rt, y=signal, name="Raw Signal", line=dict(color='#444444', width=1), opacity=0.5))
+    fig.add_trace(go.Scatter(x=rt, y=clean_signal, name="Processed Signal", line=dict(color='#00d4ff', width=2)))
     
     if not df_peaks.empty:
         fig.add_trace(go.Scatter(x=df_peaks['Retention_Time'], y=df_peaks['Intensity'], mode='markers+text', 
@@ -389,13 +393,23 @@ elif module == "🧪 Multi-Spectral Suite (HPLC/GC-MS/UV-Vis)":
 
 elif module == "📊 Phenotypic & HCS Clustering":
     st.title("High-Content Screening (HCS) & Unsupervised Clustering")
+    with st.expander("ℹ️ Data Upload Instructions"):
+        st.markdown("""
+        To run K-Means clustering on cellular data, upload a CSV or Excel file in the sidebar.
+        **Required Column Names (Case-Sensitive):**
+        * `Compound_ID` (The name or batch number of the drug)
+        * `Cell_Viability` (Numeric score)
+        * `Apoptosis_Rate` (Numeric score)
+        * `ROS_Production` (Numeric score)
+        * `Morphology_Score` (Numeric score)
+        """)
     
-    # ✨ NEW: Check for uploaded CSV data!
-    if 'active_dataset' in st.session_state:
+    # ✨ SAFETY CHECK: Ensure file has the correct columns before using it!
+    if 'active_dataset' in st.session_state and 'Cell_Viability' in st.session_state['active_dataset'].columns:
         st.success("🟢 Analyzing live uploaded HCS dataset!")
         df_pheno = st.session_state['active_dataset']
     else:
-        st.warning("🟡 No file uploaded. Using simulated demo data.")
+        st.warning("🟡 No HCS file uploaded. Using simulated demo data.")
         np.random.seed(42)
         df_pheno = pd.DataFrame({
             'Compound_ID': [f"AMP-{i:03d}" for i in range(300)],
@@ -415,6 +429,14 @@ elif module == "📊 Phenotypic & HCS Clustering":
 
 elif module == "⚙️ Enzyme Kinetics & Bioprocessing":
     st.title("Industrial Bioprocessing & Fermentation Dynamics")
+    with st.expander("ℹ️ Data Upload Instructions"):
+        st.markdown("""
+        This module simulates theoretical fermentation. You can overlay actual historical bioreactor data to compare it against the simulation.
+        **Required Column Names (Case-Sensitive):**
+        * `Time_Hours` (The hour of the fermentation run)
+        * `Actual_Biomass` (The measured biomass in g/L)
+        """)
+        
     col1, col2 = st.columns([1, 3])
     with col1:
         t_max = st.slider("Fermentation Time (hrs)", 24, 168, 72)
@@ -430,13 +452,11 @@ elif module == "⚙️ Enzyme Kinetics & Bioprocessing":
         fig.add_trace(go.Scatter(x=df_kinetics['Time_Hours'], y=df_kinetics['Biomass_gL'], name="Simulated Biomass", line=dict(color='#00d4ff')))
         fig.add_trace(go.Scatter(x=df_kinetics['Time_Hours'], y=df_kinetics['Substrate_gL'], name="Simulated Substrate", line=dict(color='#ff00d4', dash='dot')))
         
-        # ✨ NEW: Check for uploaded CSV data to overlay!
-        if 'active_dataset' in st.session_state:
+        # ✨ SAFETY CHECK: Ensure file has the correct columns before using it!
+        if 'active_dataset' in st.session_state and 'Time_Hours' in st.session_state['active_dataset'].columns:
             st.success("🟢 Overlaying live bioreactor historical data!")
             df_bio = st.session_state['active_dataset']
-            # Plot the actual lab data as dots over the simulated lines
-            if 'Time_Hours' in df_bio.columns and 'Actual_Biomass' in df_bio.columns:
-                fig.add_trace(go.Scatter(x=df_bio['Time_Hours'], y=df_bio['Actual_Biomass'], mode='markers', name='Actual Lab Biomass', marker=dict(color='#00ff00', size=8)))
+            fig.add_trace(go.Scatter(x=df_bio['Time_Hours'], y=df_bio['Actual_Biomass'], mode='markers', name='Actual Lab Biomass', marker=dict(color='#00ff00', size=8)))
         else:
             st.warning("🟡 No historical data uploaded. Showing theoretical simulation only.")
 
@@ -444,9 +464,17 @@ elif module == "⚙️ Enzyme Kinetics & Bioprocessing":
 
 elif module == "🧬 Epigenetic Array (DNA Methylation)":
     st.title("Epigenomic Profiling & Aging Biomarkers")
-    
-    # ✨ NEW: Check for uploaded CSV data!
-    if 'active_dataset' in st.session_state:
+    with st.expander("ℹ️ Data Upload Instructions"):
+        st.markdown("""
+        To analyze a methylation array, upload your CSV or Excel file in the sidebar.
+        **Required Column Names (Case-Sensitive):**
+        * `Locus` (The gene name or CpG site identifier)
+        * `CpG_Beta` (Methylation beta value between 0 and 1)
+        * `Non_CpG_Beta` (Methylation beta value between 0 and 1)
+        """)
+        
+    # ✨ SAFETY CHECK: Ensure file has the correct columns before using it!
+    if 'active_dataset' in st.session_state and 'CpG_Beta' in st.session_state['active_dataset'].columns:
         st.success("🟢 Analyzing live Methylation dataset!")
         df_meth = st.session_state['active_dataset']
     else:
@@ -458,43 +486,54 @@ elif module == "🧬 Epigenetic Array (DNA Methylation)":
     fig.add_trace(go.Scatter(x=df_meth['Locus'], y=df_meth['CpG_Beta'], mode='lines', name='CpG Methylation', line=dict(color='#00d4ff', width=2)))
     fig.add_trace(go.Scatter(x=df_meth['Locus'], y=df_meth['Non_CpG_Beta'], mode='lines', fill='tozeroy', name='Non-CpG Methylation', line=dict(color='#ff00d4', width=2)))
     st.plotly_chart(fig, use_container_width=True)
-            
-    # --- NEW: Computer Vision Tuning Controls ---
-    with st.expander("⚙️ Advanced Vision Engine Tuning", expanded=True):
-        st.markdown("Adjust these filters if the engine misses points or captures noise (like text/gridlines).")
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            ui_min_area = st.slider("Minimum Point Size", 1, 50, 10) 
-        with c2:
-            ui_max_area = st.slider("Maximum Point Size", 100, 1000, 500)
-        with c3:
-            ui_circularity = st.slider("Shape Strictness (Circularity)", 0.0, 1.0, 0.2, 0.1) 
+
+# =========================================================
+# 👇 AUTO-DIGITIZER RESTORED HERE 👇
+# =========================================================
+elif module == "📸 Auto-Digitizer (Graph OCR)":
+    st.title("Computer Vision: Graph to CSV")
+    st.info("Upload literature graphs (Image or PDF) to extract raw coordinates.")
     
-    if st.button("Initialize Vision Pipeline", use_container_width=True):
-        with st.spinner("Running OpenCV Contours & Tesseract OCR..."):
-            digitizer = GraphDigitizer(img_file)
+    img_file = st.file_uploader("Upload Graph File", type=['png', 'jpg', 'jpeg', 'pdf'])
+    
+    if img_file:
+        if img_file.name.lower().endswith('.pdf'):
+            st.success("📄 PDF Document Detected. The vision engine will scan the first page.")
+        else:
+            st.image(img_file, width=600, caption="Uploaded Original Graph")
             
-            # Pass the UI slider values into the engine
-            extracted_df, context_text = digitizer.process_full_pipeline()
-            
-            # Manually do the pipeline steps here to use the slider values
-            pixels = digitizer.isolate_data_points(min_area=ui_min_area, max_area=ui_max_area, min_circularity=ui_circularity)
-            extracted_df = digitizer.map_to_real_data(pixels)
-            
-            if not extracted_df.empty:
-                st.session_state['digitized_df'] = extracted_df
-                st.success(f"Successfully digitized {len(extracted_df)} data points.")
-                st.info("💾 Data routed to Global Memory Bank. You can now use this in the Pharmacodynamics module.")
+        with st.expander("⚙️ Advanced Vision Engine Tuning", expanded=True):
+            st.markdown("Adjust these filters if the engine misses points or captures noise (like text/gridlines).")
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                ui_min_area = st.slider("Minimum Point Size", 1, 50, 10) 
+            with c2:
+                ui_max_area = st.slider("Maximum Point Size", 100, 1000, 500)
+            with c3:
+                ui_circularity = st.slider("Shape Strictness (Circularity)", 0.0, 1.0, 0.2, 0.1) 
+        
+        if st.button("Initialize Vision Pipeline", use_container_width=True):
+            with st.spinner("Running OpenCV Contours & Tesseract OCR..."):
+                digitizer = GraphDigitizer(img_file)
                 
-                col1, col2 = st.columns([2, 1])
-                with col1:
-                    fig = px.scatter(extracted_df, x='Extracted_X', y='Extracted_Y', title="Digitized Data Reconstruction")
-                    st.plotly_chart(fig, use_container_width=True)
-                with col2:
-                    st.dataframe(extracted_df, use_container_width=True)
-            else:
-                st.error("Could not detect confident data points. Try lowering 'Minimum Point Size' and 'Shape Strictness' in the Advanced Tuning menu.")
+                # Pass the UI slider values into the engine
+                pixels = digitizer.isolate_data_points(min_area=ui_min_area, max_area=ui_max_area, min_circularity=ui_circularity)
+                extracted_df = digitizer.map_to_real_data(pixels)
+                
+                if not extracted_df.empty:
+                    st.session_state['digitized_df'] = extracted_df
+                    st.success(f"Successfully digitized {len(extracted_df)} data points.")
+                    st.info("💾 Data routed to Global Memory Bank. You can now use this in the Pharmacodynamics module.")
                     
+                    col1, col2 = st.columns([2, 1])
+                    with col1:
+                        fig = px.scatter(extracted_df, x='Extracted_X', y='Extracted_Y', title="Digitized Data Reconstruction")
+                        st.plotly_chart(fig, use_container_width=True)
+                    with col2:
+                        st.dataframe(extracted_df, use_container_width=True)
+                else:
+                    st.error("Could not detect confident data points. Try lowering 'Minimum Point Size' and 'Shape Strictness'.")
+
 elif module == "🤖 BioSIGHT Global Copilot":
     st.title("BioSIGHT Global Copilot")
     st.caption("Your AI Research Assistant. Ask questions about your biological data.")
@@ -546,12 +585,19 @@ elif module == "🤖 BioSIGHT Global Copilot":
 elif module == "📈 Quality Control (SPC)":
     st.title("📈 Statistical Process Control")
     st.markdown("Monitor laboratory instrument calibration and assay drift using Levey-Jennings methodology.")
+    with st.expander("ℹ️ Data Upload Instructions"):
+        st.markdown("""
+        To track instrument calibration over time, upload a CSV or Excel file in the sidebar.
+        **Required Column Names (Case-Sensitive):**
+        * `Run_Day` (The day or run number, e.g., 1, 2, 3)
+        * `Control_Value` (The actual measurement reading from the instrument)
+        """)
     
     import numpy as np
     import plotly.graph_objects as go
     
-    # ✨ NEW: Check for uploaded CSV data!
-    if 'active_dataset' in st.session_state:
+    # ✨ SAFETY CHECK: Ensure file has the correct columns before using it!
+    if 'active_dataset' in st.session_state and 'Run_Day' in st.session_state['active_dataset'].columns:
         st.success("🟢 Analyzing live QC tracking data!")
         df_qc = st.session_state['active_dataset']
         days = df_qc['Run_Day'].values
