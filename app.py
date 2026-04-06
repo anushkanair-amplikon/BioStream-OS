@@ -160,7 +160,7 @@ if app_mode == "☁️ Cloud Archive":
 # 2. SIDEBAR NAVIGATION & DATA INGESTION
 # ---------------------------------------------------------
 with st.sidebar:
-    st.title("🧬 BioSIGHT OS v2.0")
+    st.title("🧬 BioSIGHT v2.0")
     st.caption("Amplikon Biosystems - High-Throughput Analytics")
     st.divider()
     
