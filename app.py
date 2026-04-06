@@ -75,7 +75,7 @@ class GraphDigitizer:
 # ---------------------------------------------------------
 # 1. SYSTEM ARCHITECTURE & UI DESIGN
 # ---------------------------------------------------------
-st.set_page_config(page_title="BioStream OS | Enterprise", page_icon="🧬", layout="wide")
+st.set_page_config(page_title="BioSIGHT OS | Enterprise", page_icon="🧬", layout="wide")
 
 st.markdown("""
     <style>
