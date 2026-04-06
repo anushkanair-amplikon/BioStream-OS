@@ -112,33 +112,25 @@ st.markdown("""
 # ---------------------------------------------------------
 # 1.1 ENTERPRISE SECURITY (LOGIN GATE)
 # ---------------------------------------------------------
-# Initialize login state
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 
-# The Bouncer
 if not st.session_state['logged_in']:
-    # Create a sleek, centered login box
     col1, col2, col3 = st.columns([1, 2, 1])
-    
     with col2:
         st.markdown("<br><br><br>", unsafe_allow_html=True)
         st.markdown("<h2 style='text-align: center; color: #00d4ff;'>🧬 BioStream OS</h2>", unsafe_allow_html=True)
         st.markdown("<p style='text-align: center;'>Authorized Amplikon Personnel Only</p>", unsafe_allow_html=True)
         
-        # Input fields
         username = st.text_input("Username")
-        password = st.text_input("Password", type="password") # Hides the text as dots
+        password = st.text_input("Password", type="password") 
         
         if st.button("Initialize System", use_container_width=True):
-            # Check against your secrets.toml file
             if username == st.secrets["credentials"]["admin_username"] and password == st.secrets["credentials"]["admin_password"]:
                 st.session_state['logged_in'] = True
-                st.rerun() # Refreshes the page to show the main app
+                st.rerun() 
             else:
                 st.error("Authentication Failed. Access Denied.")
-    
-    # 🔥 CRITICAL: This stops the rest of your app from loading!
     st.stop()
     
 # =========================================================
@@ -158,7 +150,6 @@ supabase = init_connection()
 if 'digitized_df' not in st.session_state:
     st.session_state['digitized_df'] = pd.DataFrame()
 
-# Memory for the Global Copilot
 if 'chat_history' not in st.session_state:
     st.session_state['chat_history'] = []
 
@@ -187,18 +178,12 @@ if app_mode == "☁️ Cloud Archive":
 
     try:
         with st.spinner("Fetching secure records..."):
-            # Request all data from your Supabase table, ordered by newest first
             response = supabase.table("experiment_logs").select("*").order("created_at", desc=True).execute()
             data = response.data
             
             if data:
-                # Convert the raw database data into a beautiful Pandas DataFrame
                 df_archive = pd.DataFrame(data)
-                
-                # Clean up the timestamp to look professional
                 df_archive['created_at'] = pd.to_datetime(df_archive['created_at']).dt.strftime('%Y-%m-%d %H:%M:%S')
-                
-                # Rename columns for the final display
                 df_archive = df_archive.rename(columns={
                     "id": "Log ID",
                     "created_at": "Timestamp",
@@ -206,16 +191,13 @@ if app_mode == "☁️ Cloud Archive":
                     "metrics": "Calculated Metrics",
                     "ai_summary": "AI Insights"
                 })
-                
-                # Display as an interactive, dark-theme compatible table
                 st.dataframe(df_archive, use_container_width=True, hide_index=True)
             else:
-                st.info("📭 The Cloud Database is currently empty. Run an analysis in the Active Workspace and click 'Save to Cloud Database' to populate this archive.")
+                st.info("📭 The Cloud Database is currently empty.")
                 
     except Exception as e:
         st.error(f"Failed to retrieve database records: {e}")
 
-    # 🔥 CRITICAL: This stops the main workspace from loading while viewing the archive!
     st.stop()
 
 # ---------------------------------------------------------
@@ -254,9 +236,7 @@ with st.sidebar:
             elif file_extension == 'xlsx':
                 df_uploaded = pd.read_excel(uploaded_file)
             
-            # ✨ THE FIX: Save the data into the app's global memory!
             st.session_state['active_dataset'] = df_uploaded
-            
             st.success(f"Successfully loaded {uploaded_file.name} into Active Memory!")
         except Exception as e:
             st.error(f"Error reading file: {e}")
@@ -278,10 +258,7 @@ elif module == "💊 Bioactivity & Pharmacodynamics (IC50/Kd)":
     st.title("Receptor Binding & IC50 Profiling")
     with st.expander("ℹ️ Data Upload Instructions"):
         st.markdown("""
-        To analyze custom data, upload a CSV or Excel file in the sidebar.
-        **Required Column Names (Case-Sensitive):**
-        * `Concentration_uM` (The drug concentration in micromolar)
-        * `Inhibition` (The percentage of receptor inhibition)
+        To analyze custom data, upload a CSV or Excel file in the sidebar. The system will automatically attempt to map your columns and clean the data.
         """)
     
     has_memory = not st.session_state.get('digitized_df', pd.DataFrame()).empty
@@ -293,10 +270,29 @@ elif module == "💊 Bioactivity & Pharmacodynamics (IC50/Kd)":
         df_pk = df_pk.rename(columns={'Extracted_X': 'Concentration_uM', 'Extracted_Y': 'Inhibition'})
         df_pk['Concentration_uM'] = df_pk['Concentration_uM'].apply(lambda x: max(x, 1e-5)) 
         
-    # ✨ SAFETY CHECK: Ensure file has the correct columns before using it!
-    elif 'active_dataset' in st.session_state and 'Concentration_uM' in st.session_state['active_dataset'].columns:
-        st.success("🟢 Analyzing live uploaded dataset!")
-        df_pk = st.session_state['active_dataset']
+    # ✨ SMART IMPORTER & CLEANER ✨
+    elif 'active_dataset' in st.session_state:
+        df_raw = st.session_state['active_dataset'].copy()
+        cols = df_raw.columns.tolist()
+        
+        # Fuzzy mapping heuristics
+        guess_x = next((c for c in cols if any(k in c.lower() for k in ['conc', 'dose', 'um', 'nm', 'x'])), cols[0])
+        guess_y = next((c for c in cols if any(k in c.lower() for k in ['inh', 'resp', 'viab', 'effect', 'y'])), cols[-1] if len(cols)>1 else cols[0])
+        
+        st.info("🧠 BioSIGHT AI mapped your columns. Adjust if necessary:")
+        col1, col2 = st.columns(2)
+        with col1:
+            x_col = st.selectbox("X-Axis (Concentration):", cols, index=cols.index(guess_x))
+        with col2:
+            y_col = st.selectbox("Y-Axis (Response/Inhibition):", cols, index=cols.index(guess_y))
+            
+        # Rename and Clean
+        df_pk = df_raw.rename(columns={x_col: 'Concentration_uM', y_col: 'Inhibition'})
+        df_pk['Concentration_uM'] = pd.to_numeric(df_pk['Concentration_uM'], errors='coerce')
+        df_pk['Inhibition'] = pd.to_numeric(df_pk['Inhibition'], errors='coerce')
+        df_pk = df_pk.dropna(subset=['Concentration_uM', 'Inhibition']) # Drop dirty data
+        df_pk['Concentration_uM'] = df_pk['Concentration_uM'].apply(lambda x: max(x, 1e-9)) # Prevent log(0)
+        st.success(f"🟢 Cleaned and loaded {len(df_pk)} valid data points!")
         
     else:
         st.caption("Using Live Internship Data (Amplikon Dataset)")
@@ -350,22 +346,34 @@ elif module == "💊 Bioactivity & Pharmacodynamics (IC50/Kd)":
                 except Exception as e:
                     st.error(f"AI Engine Error: Make sure your API key is configured in secrets.toml. Details: {e}")
     else:
-        st.error("Curve fitting failed. The data may not follow a standard dose-response curve.")
+        st.error("Curve fitting failed. The data may not follow a standard dose-response curve. Check your mappings!")
 
 elif module == "🧪 Multi-Spectral Suite (HPLC/GC-MS/UV-Vis)":
     st.title("Chromatographic Deconvolution & Peak Integration")
     with st.expander("ℹ️ Data Upload Instructions"):
         st.markdown("""
-        To process a live chromatogram, upload a CSV or Excel file in the sidebar.
-        **Required Column Names (Case-Sensitive):**
-        * `Retention_Time` (Time in minutes)
-        * `Intensity` (The raw detector signal/absorbance)
+        To process a live chromatogram, upload a CSV or Excel file. The system will automatically map Time and Intensity.
         """)
     
-    # ✨ SAFETY CHECK: Ensure file has the correct columns before using it!
-    if 'active_dataset' in st.session_state and 'Retention_Time' in st.session_state['active_dataset'].columns:
-        st.success("🟢 Analyzing live uploaded HPLC dataset!")
-        df_spec = st.session_state['active_dataset']
+    # ✨ SMART IMPORTER & CLEANER ✨
+    if 'active_dataset' in st.session_state:
+        df_raw = st.session_state['active_dataset'].copy()
+        cols = df_raw.columns.tolist()
+        
+        guess_x = next((c for c in cols if any(k in c.lower() for k in ['time', 'ret', 'min', 'rt', 'x'])), cols[0])
+        guess_y = next((c for c in cols if any(k in c.lower() for k in ['int', 'abs', 'signal', 'mau', 'y'])), cols[-1] if len(cols)>1 else cols[0])
+        
+        st.info("🧠 BioSIGHT AI mapped your columns:")
+        c1, c2 = st.columns(2)
+        with c1: x_col = st.selectbox("X-Axis (Retention Time):", cols, index=cols.index(guess_x))
+        with c2: y_col = st.selectbox("Y-Axis (Intensity):", cols, index=cols.index(guess_y))
+        
+        df_spec = df_raw.rename(columns={x_col: 'Retention_Time', y_col: 'Intensity'})
+        df_spec['Retention_Time'] = pd.to_numeric(df_spec['Retention_Time'], errors='coerce')
+        df_spec['Intensity'] = pd.to_numeric(df_spec['Intensity'], errors='coerce')
+        df_spec = df_spec.dropna(subset=['Retention_Time', 'Intensity'])
+        
+        st.success(f"🟢 Cleaned and loaded {len(df_spec)} scans!")
         rt = df_spec['Retention_Time'].values
         signal = df_spec['Intensity'].values
     else:
@@ -395,19 +403,34 @@ elif module == "📊 Phenotypic & HCS Clustering":
     st.title("High-Content Screening (HCS) & Unsupervised Clustering")
     with st.expander("ℹ️ Data Upload Instructions"):
         st.markdown("""
-        To run K-Means clustering on cellular data, upload a CSV or Excel file in the sidebar.
-        **Required Column Names (Case-Sensitive):**
-        * `Compound_ID` (The name or batch number of the drug)
-        * `Cell_Viability` (Numeric score)
-        * `Apoptosis_Rate` (Numeric score)
-        * `ROS_Production` (Numeric score)
-        * `Morphology_Score` (Numeric score)
+        Upload your screening dataset. The AI will attempt to auto-map ID, Viability, Apoptosis, ROS, and Morphology columns.
         """)
     
-    # ✨ SAFETY CHECK: Ensure file has the correct columns before using it!
-    if 'active_dataset' in st.session_state and 'Cell_Viability' in st.session_state['active_dataset'].columns:
-        st.success("🟢 Analyzing live uploaded HCS dataset!")
-        df_pheno = st.session_state['active_dataset']
+    # ✨ SMART IMPORTER & CLEANER ✨
+    if 'active_dataset' in st.session_state:
+        df_raw = st.session_state['active_dataset'].copy()
+        cols = df_raw.columns.tolist()
+        
+        g_id = next((c for c in cols if any(k in c.lower() for k in ['id', 'comp', 'name', 'drug'])), cols[0])
+        g_v = next((c for c in cols if any(k in c.lower() for k in ['viab', 'cell', 'live'])), cols[1] if len(cols)>1 else cols[0])
+        g_a = next((c for c in cols if any(k in c.lower() for k in ['apo', 'death', 'dead'])), cols[2] if len(cols)>2 else cols[0])
+        g_r = next((c for c in cols if any(k in c.lower() for k in ['ros', 'ox', 'rad'])), cols[3] if len(cols)>3 else cols[0])
+        g_m = next((c for c in cols if any(k in c.lower() for k in ['morph', 'shape', 'area'])), cols[4] if len(cols)>4 else cols[0])
+        
+        st.info("🧠 Auto-Mapped Schema. Verify your features:")
+        c1, c2, c3 = st.columns(3)
+        c4, c5 = st.columns(2)
+        with c1: col_id = st.selectbox("Compound ID:", cols, index=cols.index(g_id))
+        with c2: col_v = st.selectbox("Cell Viability:", cols, index=cols.index(g_v))
+        with c3: col_a = st.selectbox("Apoptosis Rate:", cols, index=cols.index(g_a))
+        with c4: col_r = st.selectbox("ROS Production:", cols, index=cols.index(g_r))
+        with c5: col_m = st.selectbox("Morphology Score:", cols, index=cols.index(g_m))
+        
+        df_pheno = df_raw.rename(columns={col_id: 'Compound_ID', col_v: 'Cell_Viability', col_a: 'Apoptosis_Rate', col_r: 'ROS_Production', col_m: 'Morphology_Score'})
+        for c in ['Cell_Viability', 'Apoptosis_Rate', 'ROS_Production', 'Morphology_Score']:
+            df_pheno[c] = pd.to_numeric(df_pheno[c], errors='coerce')
+        df_pheno = df_pheno.dropna(subset=['Cell_Viability', 'Apoptosis_Rate', 'ROS_Production', 'Morphology_Score'])
+        st.success(f"🟢 Clustering on {len(df_pheno)} clean compounds!")
     else:
         st.warning("🟡 No HCS file uploaded. Using simulated demo data.")
         np.random.seed(42)
@@ -431,10 +454,7 @@ elif module == "⚙️ Enzyme Kinetics & Bioprocessing":
     st.title("Industrial Bioprocessing & Fermentation Dynamics")
     with st.expander("ℹ️ Data Upload Instructions"):
         st.markdown("""
-        This module simulates theoretical fermentation. You can overlay actual historical bioreactor data to compare it against the simulation.
-        **Required Column Names (Case-Sensitive):**
-        * `Time_Hours` (The hour of the fermentation run)
-        * `Actual_Biomass` (The measured biomass in g/L)
+        Upload historical bioreactor data to overlay on the theoretical simulation. The system will auto-map Time and Biomass.
         """)
         
     col1, col2 = st.columns([1, 3])
@@ -452,10 +472,25 @@ elif module == "⚙️ Enzyme Kinetics & Bioprocessing":
         fig.add_trace(go.Scatter(x=df_kinetics['Time_Hours'], y=df_kinetics['Biomass_gL'], name="Simulated Biomass", line=dict(color='#00d4ff')))
         fig.add_trace(go.Scatter(x=df_kinetics['Time_Hours'], y=df_kinetics['Substrate_gL'], name="Simulated Substrate", line=dict(color='#ff00d4', dash='dot')))
         
-        # ✨ SAFETY CHECK: Ensure file has the correct columns before using it!
-        if 'active_dataset' in st.session_state and 'Time_Hours' in st.session_state['active_dataset'].columns:
-            st.success("🟢 Overlaying live bioreactor historical data!")
-            df_bio = st.session_state['active_dataset']
+        # ✨ SMART IMPORTER & CLEANER ✨
+        if 'active_dataset' in st.session_state:
+            df_raw = st.session_state['active_dataset'].copy()
+            cols = df_raw.columns.tolist()
+            
+            g_t = next((c for c in cols if any(k in c.lower() for k in ['time', 'hr', 'hour', 't'])), cols[0])
+            g_b = next((c for c in cols if any(k in c.lower() for k in ['bio', 'mass', 'od', 'cell'])), cols[-1] if len(cols)>1 else cols[0])
+            
+            st.info("🧠 Auto-Mapped Bioreactor Overlay:")
+            c1, c2 = st.columns(2)
+            with c1: col_t = st.selectbox("Time Column:", cols, index=cols.index(g_t))
+            with c2: col_b = st.selectbox("Biomass Column:", cols, index=cols.index(g_b))
+            
+            df_bio = df_raw.rename(columns={col_t: 'Time_Hours', col_b: 'Actual_Biomass'})
+            df_bio['Time_Hours'] = pd.to_numeric(df_bio['Time_Hours'], errors='coerce')
+            df_bio['Actual_Biomass'] = pd.to_numeric(df_bio['Actual_Biomass'], errors='coerce')
+            df_bio = df_bio.dropna(subset=['Time_Hours', 'Actual_Biomass'])
+            
+            st.success(f"🟢 Overlaying {len(df_bio)} live data points!")
             fig.add_trace(go.Scatter(x=df_bio['Time_Hours'], y=df_bio['Actual_Biomass'], mode='markers', name='Actual Lab Biomass', marker=dict(color='#00ff00', size=8)))
         else:
             st.warning("🟡 No historical data uploaded. Showing theoretical simulation only.")
@@ -466,17 +501,29 @@ elif module == "🧬 Epigenetic Array (DNA Methylation)":
     st.title("Epigenomic Profiling & Aging Biomarkers")
     with st.expander("ℹ️ Data Upload Instructions"):
         st.markdown("""
-        To analyze a methylation array, upload your CSV or Excel file in the sidebar.
-        **Required Column Names (Case-Sensitive):**
-        * `Locus` (The gene name or CpG site identifier)
-        * `CpG_Beta` (Methylation beta value between 0 and 1)
-        * `Non_CpG_Beta` (Methylation beta value between 0 and 1)
+        Upload your methylation array. The AI will auto-map Locus, CpG, and Non-CpG columns.
         """)
         
-    # ✨ SAFETY CHECK: Ensure file has the correct columns before using it!
-    if 'active_dataset' in st.session_state and 'CpG_Beta' in st.session_state['active_dataset'].columns:
-        st.success("🟢 Analyzing live Methylation dataset!")
-        df_meth = st.session_state['active_dataset']
+    # ✨ SMART IMPORTER & CLEANER ✨
+    if 'active_dataset' in st.session_state:
+        df_raw = st.session_state['active_dataset'].copy()
+        cols = df_raw.columns.tolist()
+        
+        g_l = next((c for c in cols if any(k in c.lower() for k in ['loc', 'gene', 'site'])), cols[0])
+        g_c = next((c for c in cols if any(k in c.lower() for k in ['cpg', 'meth1', 'beta1'])), cols[1] if len(cols)>1 else cols[0])
+        g_nc = next((c for c in cols if any(k in c.lower() for k in ['non', 'meth2', 'beta2'])), cols[2] if len(cols)>2 else cols[0])
+        
+        st.info("🧠 Auto-Mapped Epigenetic Schema:")
+        c1, c2, c3 = st.columns(3)
+        with c1: col_l = st.selectbox("Locus/Gene:", cols, index=cols.index(g_l))
+        with c2: col_c = st.selectbox("CpG Methylation:", cols, index=cols.index(g_c))
+        with c3: col_nc = st.selectbox("Non-CpG Methylation:", cols, index=cols.index(g_nc))
+        
+        df_meth = df_raw.rename(columns={col_l: 'Locus', col_c: 'CpG_Beta', col_nc: 'Non_CpG_Beta'})
+        df_meth['CpG_Beta'] = pd.to_numeric(df_meth['CpG_Beta'], errors='coerce')
+        df_meth['Non_CpG_Beta'] = pd.to_numeric(df_meth['Non_CpG_Beta'], errors='coerce')
+        df_meth = df_meth.dropna(subset=['CpG_Beta', 'Non_CpG_Beta'])
+        st.success(f"🟢 Processing {len(df_meth)} loci!")
     else:
         st.warning("🟡 No DNA data uploaded. Using simulated epigenetic profile.")
         analyzer = EpigeneticAnalyzer()
@@ -587,19 +634,31 @@ elif module == "📈 Quality Control (SPC)":
     st.markdown("Monitor laboratory instrument calibration and assay drift using Levey-Jennings methodology.")
     with st.expander("ℹ️ Data Upload Instructions"):
         st.markdown("""
-        To track instrument calibration over time, upload a CSV or Excel file in the sidebar.
-        **Required Column Names (Case-Sensitive):**
-        * `Run_Day` (The day or run number, e.g., 1, 2, 3)
-        * `Control_Value` (The actual measurement reading from the instrument)
+        Upload instrument QC logs. The system will auto-map Run Day and Control Values.
         """)
     
     import numpy as np
     import plotly.graph_objects as go
     
-    # ✨ SAFETY CHECK: Ensure file has the correct columns before using it!
-    if 'active_dataset' in st.session_state and 'Run_Day' in st.session_state['active_dataset'].columns:
-        st.success("🟢 Analyzing live QC tracking data!")
-        df_qc = st.session_state['active_dataset']
+    # ✨ SMART IMPORTER & CLEANER ✨
+    if 'active_dataset' in st.session_state:
+        df_raw = st.session_state['active_dataset'].copy()
+        cols = df_raw.columns.tolist()
+        
+        g_d = next((c for c in cols if any(k in c.lower() for k in ['day', 'run', 'time', 'date', 'x'])), cols[0])
+        g_v = next((c for c in cols if any(k in c.lower() for k in ['val', 'ctrl', 'read', 'meas', 'y'])), cols[-1] if len(cols)>1 else cols[0])
+        
+        st.info("🧠 Auto-Mapped QC Log:")
+        c1, c2 = st.columns(2)
+        with c1: col_d = st.selectbox("Run/Day Column:", cols, index=cols.index(g_d))
+        with c2: col_v = st.selectbox("Control Value Column:", cols, index=cols.index(g_v))
+        
+        df_qc = df_raw.rename(columns={col_d: 'Run_Day', col_v: 'Control_Value'})
+        df_qc['Run_Day'] = pd.to_numeric(df_qc['Run_Day'], errors='coerce')
+        df_qc['Control_Value'] = pd.to_numeric(df_qc['Control_Value'], errors='coerce')
+        df_qc = df_qc.dropna(subset=['Run_Day', 'Control_Value'])
+        
+        st.success(f"🟢 Tracking {len(df_qc)} clean QA/QC runs!")
         days = df_qc['Run_Day'].values
         qc_values = df_qc['Control_Value'].values
     else:
