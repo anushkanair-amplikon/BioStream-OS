@@ -95,7 +95,7 @@ if not st.session_state['logged_in']:
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.markdown("<br><br><br>", unsafe_allow_html=True)
-        st.markdown("<h2 style='text-align: center; color: #00d4ff;'>🧬 BioStream OS</h2>", unsafe_allow_html=True)
+        st.markdown("<h2 style='text-align: center; color: #00d4ff;'>🧬 BioSIGHT OS</h2>", unsafe_allow_html=True)
         st.markdown("<p style='text-align: center;'>Authorized Amplikon Personnel Only</p>", unsafe_allow_html=True)
         username = st.text_input("Username")
         password = st.text_input("Password", type="password") 
@@ -160,7 +160,7 @@ if app_mode == "☁️ Cloud Archive":
 # 2. SIDEBAR NAVIGATION & DATA INGESTION
 # ---------------------------------------------------------
 with st.sidebar:
-    st.title("🧬 BioStream OS v2.0")
+    st.title("🧬 BioSIGHT OS v2.0")
     st.caption("Amplikon Biosystems - High-Throughput Analytics")
     st.divider()
     
