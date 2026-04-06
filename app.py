@@ -163,7 +163,6 @@ app_mode = st.sidebar.radio(
 )
 st.sidebar.markdown("---")
 
-
 # ---------------------------------------------------------
 # ☁️ CLOUD ARCHIVE VIEW
 # ---------------------------------------------------------
@@ -223,23 +222,39 @@ with st.sidebar:
     st.divider()
     st.subheader("Data Ingestion")
     
-    uploaded_file = st.file_uploader(
-        "Upload Raw Amplikon Data", 
-        type=["csv", "xlsx", "txt", "tsv", "mzml", "dat"]
+    # ✨ MULTI-FILE UPLOAD UPGRADE ✨
+    uploaded_files = st.file_uploader(
+        "Upload Raw Data (Up to 10 files)", 
+        type=["csv", "xlsx", "txt", "tsv", "mzml", "dat"],
+        accept_multiple_files=True
     )
     
-    if uploaded_file is not None:
-        file_extension = uploaded_file.name.split('.')[-1].lower()
+    if uploaded_files:
+        if len(uploaded_files) > 10:
+            st.warning("⚠️ Limit reached. Showing first 10 files.")
+            uploaded_files = uploaded_files[:10]
+            
+        # Dropdown to select which file is currently "Active"
+        file_names = [f.name for f in uploaded_files]
+        selected_file_name = st.selectbox("📂 Select Active Dataset:", file_names)
+        
+        active_file = next(f for f in uploaded_files if f.name == selected_file_name)
+        file_extension = active_file.name.split('.')[-1].lower()
+        
         try:
             if file_extension in ['csv', 'txt', 'tsv']:
-                df_uploaded = pd.read_csv(uploaded_file, sep=None, engine='python')
+                df_uploaded = pd.read_csv(active_file, sep=None, engine='python')
             elif file_extension == 'xlsx':
-                df_uploaded = pd.read_excel(uploaded_file)
+                df_uploaded = pd.read_excel(active_file)
             
             st.session_state['active_dataset'] = df_uploaded
-            st.success(f"Successfully loaded {uploaded_file.name} into Active Memory!")
+            st.success(f"✅ {active_file.name} loaded into Memory!")
         except Exception as e:
             st.error(f"Error reading file: {e}")
+    else:
+        # Clear memory if files are closed
+        if 'active_dataset' in st.session_state:
+            del st.session_state['active_dataset']
 
 # ---------------------------------------------------------
 # 3. MODULE EXECUTION
@@ -257,7 +272,7 @@ if module == "🛸 Universal Telemetry Dashboard":
 elif module == "💊 Bioactivity & Pharmacodynamics (IC50/Kd)":
     st.title("Receptor Binding & IC50 Profiling")
     with st.expander("ℹ️ Data Upload Instructions"):
-        st.markdown("Upload any CSV with Dose/Response data. The AI will automatically deep-scan and map the numbers.")
+        st.markdown("Upload any CSV with Dose/Response data. Verify the column mapping below.")
     
     has_memory = not st.session_state.get('digitized_df', pd.DataFrame()).empty
     use_memory = st.toggle("📥 Pull Data from Global Memory Bank (Digitizer)", disabled=not has_memory)
@@ -268,31 +283,27 @@ elif module == "💊 Bioactivity & Pharmacodynamics (IC50/Kd)":
         df_pk = df_pk.rename(columns={'Extracted_X': 'Concentration_uM', 'Extracted_Y': 'Inhibition'})
         df_pk['Concentration_uM'] = df_pk['Concentration_uM'].apply(lambda x: max(x, 1e-5)) 
         
-    # ✨ ZERO-TOUCH DEEP SCANNER (IC50) ✨
+    # ✨ HYBRID SMART IMPORTER ✨
     elif 'active_dataset' in st.session_state:
         df_raw = st.session_state['active_dataset'].copy()
+        cols = df_raw.columns.tolist()
         
-        # Fallback assignments
-        x_col, y_col = df_raw.columns[0], df_raw.columns[-1] 
+        guess_x = next((c for c in cols if any(k in c.lower() for k in ['conc', 'dose', 'um', 'nm', 'x'])), cols[0])
+        guess_y = next((c for c in cols if any(k in c.lower() for k in ['inh', 'resp', 'viab', 'effect', 'y'])), cols[-1] if len(cols)>1 else cols[0])
         
-        for col in df_raw.columns:
-            # Check for numeric data
-            if pd.api.types.is_numeric_dtype(df_raw[col]):
-                # If numbers are increasing exponentially (log scale) or span huge ranges, it's Concentration
-                if df_raw[col].is_monotonic_increasing or (df_raw[col].max() / (df_raw[col].min() + 1e-9) > 20):
-                    x_col = col
-                # If numbers max out around 100-120 and are mostly positive, it's Inhibition
-                elif df_raw[col].max() <= 150 and df_raw[col].mean() > 1:
-                    y_col = col
-                    
-        st.success(f"🤖 BioSIGHT DeepScan mapped Concentration to '{x_col}' and Inhibition to '{y_col}'.")
+        st.info("🧠 BioSIGHT AI mapped your columns. Adjust if necessary:")
+        col1, col2 = st.columns(2)
+        with col1:
+            x_col = st.selectbox("Select Concentration (X-Axis):", cols, index=cols.index(guess_x))
+        with col2:
+            y_col = st.selectbox("Select Inhibition/Response (Y-Axis):", cols, index=cols.index(guess_y))
             
-        # Clean and assign instantly
         df_pk = df_raw.rename(columns={x_col: 'Concentration_uM', y_col: 'Inhibition'})
         df_pk['Concentration_uM'] = pd.to_numeric(df_pk['Concentration_uM'], errors='coerce')
         df_pk['Inhibition'] = pd.to_numeric(df_pk['Inhibition'], errors='coerce')
         df_pk = df_pk.dropna(subset=['Concentration_uM', 'Inhibition'])
         df_pk['Concentration_uM'] = df_pk['Concentration_uM'].apply(lambda x: max(x, 1e-9))
+        st.success(f"🟢 Processing {len(df_pk)} valid data points!")
         
     else:
         st.caption("Using Live Internship Data (Amplikon Dataset)")
@@ -339,10 +350,8 @@ elif module == "💊 Bioactivity & Pharmacodynamics (IC50/Kd)":
                     Conclude with a recommendation on whether it should advance to in-vivo clinical trials or requires chemical optimization.
                     Do not use markdown headers or fluff.
                     """
-                    
                     response = model.generate_content(ai_prompt)
                     st.info(response.text)
-                    
                 except Exception as e:
                     st.error(f"AI Engine Error: Make sure your API key is configured in secrets.toml. Details: {e}")
     else:
@@ -351,26 +360,22 @@ elif module == "💊 Bioactivity & Pharmacodynamics (IC50/Kd)":
 elif module == "🧪 Multi-Spectral Suite (HPLC/GC-MS/UV-Vis)":
     st.title("Chromatographic Deconvolution & Peak Integration")
     with st.expander("ℹ️ Data Upload Instructions"):
-        st.markdown("Upload a raw instrument trace. The AI will scan the vectors and map Time and Intensity.")
+        st.markdown("Upload a raw instrument trace. Verify the column mapping below.")
     
-    # ✨ ZERO-TOUCH DEEP SCANNER (HPLC) ✨
+    # ✨ HYBRID SMART IMPORTER ✨
     if 'active_dataset' in st.session_state:
         df_raw = st.session_state['active_dataset'].copy()
+        cols = df_raw.columns.tolist()
         
-        time_col, signal_col = df_raw.columns[0], df_raw.columns[-1]
+        guess_x = next((c for c in cols if any(k in c.lower() for k in ['time', 'ret', 'min', 'rt', 'x'])), cols[0])
+        guess_y = next((c for c in cols if any(k in c.lower() for k in ['int', 'abs', 'signal', 'mau', 'y'])), cols[-1] if len(cols)>1 else cols[0])
         
-        for col in df_raw.columns:
-            if pd.api.types.is_numeric_dtype(df_raw[col]):
-                # Time moves strictly forward
-                if df_raw[col].is_monotonic_increasing:
-                    time_col = col
-                # Signal is highly variable
-                elif df_raw[col].std() > 5:
-                    signal_col = col
-                
-        st.success(f"🤖 BioSIGHT DeepScan mapped Time to '{time_col}' and Intensity to '{signal_col}'.")
+        st.info("🧠 BioSIGHT AI mapped your columns:")
+        c1, c2 = st.columns(2)
+        with c1: x_col = st.selectbox("Select Retention Time (X-Axis):", cols, index=cols.index(guess_x))
+        with c2: y_col = st.selectbox("Select Intensity (Y-Axis):", cols, index=cols.index(guess_y))
         
-        df_spec = df_raw.rename(columns={time_col: 'Retention_Time', signal_col: 'Intensity'})
+        df_spec = df_raw.rename(columns={x_col: 'Retention_Time', y_col: 'Intensity'})
         df_spec['Retention_Time'] = pd.to_numeric(df_spec['Retention_Time'], errors='coerce')
         df_spec['Intensity'] = pd.to_numeric(df_spec['Intensity'], errors='coerce')
         df_spec = df_spec.dropna(subset=['Retention_Time', 'Intensity'])
@@ -403,32 +408,39 @@ elif module == "🧪 Multi-Spectral Suite (HPLC/GC-MS/UV-Vis)":
 elif module == "📊 Phenotypic & HCS Clustering":
     st.title("High-Content Screening (HCS) & Unsupervised Clustering")
     with st.expander("ℹ️ Data Upload Instructions"):
-        st.markdown("Upload any multidimensional dataset. The AI will grab the first text column as ID, and the next 4 numeric columns for clustering.")
+        st.markdown("Upload a multidimensional dataset. **Requires at least 1 ID column and 4 numeric features.**")
     
-    # ✨ ZERO-TOUCH DEEP SCANNER (Clustering) ✨
+    # ✨ HYBRID SMART IMPORTER (With Crash-Proof Shield) ✨
     if 'active_dataset' in st.session_state:
         df_raw = st.session_state['active_dataset'].copy()
+        cols = df_raw.columns.tolist()
+        num_cols = df_raw.select_dtypes(include=[np.number]).columns.tolist()
         
-        id_col = df_raw.select_dtypes(include=['object']).columns[0] if not df_raw.select_dtypes(include=['object']).empty else df_raw.columns[0]
-        numeric_cols = df_raw.select_dtypes(include=[np.number]).columns.tolist()
+        # CRASH-PROOF SHIELD: Prevent small files from breaking the math engine
+        if len(num_cols) < 4:
+            st.error("🚨 Dataset too small: Clustering requires at least 4 numeric columns (e.g., Viability, ROS, Apoptosis, Morphology). Please upload a larger HCS dataset or select a different module.")
+            st.stop() # Soft stops the module here!
+            
+        g_id = next((c for c in cols if any(k in c.lower() for k in ['id', 'comp', 'name', 'drug'])), cols[0])
+        g_v = num_cols[0]
+        g_a = num_cols[1]
+        g_r = num_cols[2]
+        g_m = num_cols[3]
         
-        # Grab up to 4 numeric columns to cluster on
-        features = numeric_cols[:4] if len(numeric_cols) >= 4 else numeric_cols
+        st.info("🧠 Auto-Mapped Features. Adjust if necessary:")
+        c1, c2, c3 = st.columns(3)
+        c4, c5 = st.columns(2)
+        with c1: col_id = st.selectbox("Compound ID:", cols, index=cols.index(g_id))
+        with c2: col_v = st.selectbox("Feature 1 (Cell Viability):", num_cols, index=num_cols.index(g_v))
+        with c3: col_a = st.selectbox("Feature 2 (Apoptosis Rate):", num_cols, index=num_cols.index(g_a))
+        with c4: col_r = st.selectbox("Feature 3 (ROS Production):", num_cols, index=num_cols.index(g_r))
+        with c5: col_m = st.selectbox("Feature 4 (Morphology Score):", num_cols, index=num_cols.index(g_m))
         
-        st.success(f"🤖 BioSIGHT DeepScan clustering on: {', '.join(features)}.")
-        
-        # Prepare the dataframe for the engine
-        df_pheno = df_raw[[id_col] + features].copy()
-        df_pheno = df_pheno.dropna()
-        df_pheno = df_pheno.rename(columns={id_col: 'Compound_ID'})
-        
-        # Pad with dummies if they only provided 1 or 2 numeric columns so the engine doesn't crash
-        feature_names = ['Cell_Viability', 'Apoptosis_Rate', 'ROS_Production', 'Morphology_Score']
-        for i, col in enumerate(features):
-            df_pheno = df_pheno.rename(columns={col: feature_names[i]})
-        for i in range(len(features), 4):
-            df_pheno[feature_names[i]] = np.random.normal(50, 10, len(df_pheno))
-
+        df_pheno = df_raw.rename(columns={col_id: 'Compound_ID', col_v: 'Cell_Viability', col_a: 'Apoptosis_Rate', col_r: 'ROS_Production', col_m: 'Morphology_Score'})
+        for c in ['Cell_Viability', 'Apoptosis_Rate', 'ROS_Production', 'Morphology_Score']:
+            df_pheno[c] = pd.to_numeric(df_pheno[c], errors='coerce')
+        df_pheno = df_pheno.dropna(subset=['Cell_Viability', 'Apoptosis_Rate', 'ROS_Production', 'Morphology_Score'])
+        st.success(f"🟢 Clustering on {len(df_pheno)} clean compounds!")
     else:
         st.warning("🟡 No HCS file uploaded. Using simulated demo data.")
         np.random.seed(42)
@@ -451,7 +463,7 @@ elif module == "📊 Phenotypic & HCS Clustering":
 elif module == "⚙️ Enzyme Kinetics & Bioprocessing":
     st.title("Industrial Bioprocessing & Fermentation Dynamics")
     with st.expander("ℹ️ Data Upload Instructions"):
-        st.markdown("Upload historical log data. The AI will isolate the forward-moving Time vector and the Biomass vector to overlay on the simulation.")
+        st.markdown("Upload historical bioreactor data to overlay on the theoretical simulation.")
         
     col1, col2 = st.columns([1, 3])
     with col1:
@@ -468,21 +480,20 @@ elif module == "⚙️ Enzyme Kinetics & Bioprocessing":
         fig.add_trace(go.Scatter(x=df_kinetics['Time_Hours'], y=df_kinetics['Biomass_gL'], name="Simulated Biomass", line=dict(color='#00d4ff')))
         fig.add_trace(go.Scatter(x=df_kinetics['Time_Hours'], y=df_kinetics['Substrate_gL'], name="Simulated Substrate", line=dict(color='#ff00d4', dash='dot')))
         
-        # ✨ ZERO-TOUCH DEEP SCANNER (Bioreactor) ✨
+        # ✨ HYBRID SMART IMPORTER ✨
         if 'active_dataset' in st.session_state:
             df_raw = st.session_state['active_dataset'].copy()
-            time_col, bio_col = df_raw.columns[0], df_raw.columns[-1]
+            cols = df_raw.columns.tolist()
             
-            for col in df_raw.columns:
-                if pd.api.types.is_numeric_dtype(df_raw[col]):
-                    if df_raw[col].is_monotonic_increasing:
-                        time_col = col
-                    else:
-                        bio_col = col
+            g_t = next((c for c in cols if any(k in c.lower() for k in ['time', 'hr', 'hour', 't'])), cols[0])
+            g_b = next((c for c in cols if any(k in c.lower() for k in ['bio', 'mass', 'od', 'cell'])), cols[-1] if len(cols)>1 else cols[0])
             
-            st.success(f"🤖 BioSIGHT DeepScan mapped Time to '{time_col}' and Biomass to '{bio_col}'.")
+            st.info("🧠 Auto-Mapped Bioreactor Overlay:")
+            c1, c2 = st.columns(2)
+            with c1: col_t = st.selectbox("Select Time Column:", cols, index=cols.index(g_t))
+            with c2: col_b = st.selectbox("Select Biomass Column:", cols, index=cols.index(g_b))
             
-            df_bio = df_raw.rename(columns={time_col: 'Time_Hours', bio_col: 'Actual_Biomass'})
+            df_bio = df_raw.rename(columns={col_t: 'Time_Hours', col_b: 'Actual_Biomass'})
             df_bio['Time_Hours'] = pd.to_numeric(df_bio['Time_Hours'], errors='coerce')
             df_bio['Actual_Biomass'] = pd.to_numeric(df_bio['Actual_Biomass'], errors='coerce')
             df_bio = df_bio.dropna(subset=['Time_Hours', 'Actual_Biomass'])
@@ -496,26 +507,28 @@ elif module == "⚙️ Enzyme Kinetics & Bioprocessing":
 elif module == "🧬 Epigenetic Array (DNA Methylation)":
     st.title("Epigenomic Profiling & Aging Biomarkers")
     with st.expander("ℹ️ Data Upload Instructions"):
-        st.markdown("Upload your array. The AI will grab the first text column as Locus, and identify two methylation vectors (0.0 to 1.0).")
+        st.markdown("Upload your methylation array. Verify column mappings below.")
         
-    # ✨ ZERO-TOUCH DEEP SCANNER (Epigenetics) ✨
+    # ✨ HYBRID SMART IMPORTER ✨
     if 'active_dataset' in st.session_state:
         df_raw = st.session_state['active_dataset'].copy()
+        cols = df_raw.columns.tolist()
         
-        # Grab text col for Locus, and numeric cols for beta values
-        loc_col = df_raw.select_dtypes(include=['object']).columns[0] if not df_raw.select_dtypes(include=['object']).empty else df_raw.columns[0]
-        num_cols = df_raw.select_dtypes(include=[np.number]).columns.tolist()
+        g_l = next((c for c in cols if any(k in c.lower() for k in ['loc', 'gene', 'site'])), cols[0])
+        g_c = next((c for c in cols if any(k in c.lower() for k in ['cpg', 'meth1', 'beta1'])), cols[1] if len(cols)>1 else cols[0])
+        g_nc = next((c for c in cols if any(k in c.lower() for k in ['non', 'meth2', 'beta2'])), cols[2] if len(cols)>2 else cols[0])
         
-        cpg_col = num_cols[0] if len(num_cols) > 0 else df_raw.columns[1]
-        ncpg_col = num_cols[1] if len(num_cols) > 1 else df_raw.columns[-1]
+        st.info("🧠 Auto-Mapped Epigenetic Schema:")
+        c1, c2, c3 = st.columns(3)
+        with c1: col_l = st.selectbox("Select Locus/Gene:", cols, index=cols.index(g_l))
+        with c2: col_c = st.selectbox("Select CpG Methylation:", cols, index=cols.index(g_c))
+        with c3: col_nc = st.selectbox("Select Non-CpG Methylation:", cols, index=cols.index(g_nc))
         
-        st.success(f"🤖 BioSIGHT DeepScan mapped Locus to '{loc_col}' and Beta values to '{cpg_col}' and '{ncpg_col}'.")
-        
-        df_meth = df_raw.rename(columns={loc_col: 'Locus', cpg_col: 'CpG_Beta', ncpg_col: 'Non_CpG_Beta'})
+        df_meth = df_raw.rename(columns={col_l: 'Locus', col_c: 'CpG_Beta', col_nc: 'Non_CpG_Beta'})
         df_meth['CpG_Beta'] = pd.to_numeric(df_meth['CpG_Beta'], errors='coerce')
         df_meth['Non_CpG_Beta'] = pd.to_numeric(df_meth['Non_CpG_Beta'], errors='coerce')
         df_meth = df_meth.dropna(subset=['CpG_Beta', 'Non_CpG_Beta'])
-        
+        st.success(f"🟢 Processing {len(df_meth)} loci!")
     else:
         st.warning("🟡 No DNA data uploaded. Using simulated epigenetic profile.")
         analyzer = EpigeneticAnalyzer()
@@ -533,16 +546,24 @@ elif module == "📸 Auto-Digitizer (Graph OCR)":
     st.title("Computer Vision: Graph to CSV")
     st.info("Upload literature graphs (Image or PDF) to extract raw coordinates.")
     
-    img_file = st.file_uploader("Upload Graph File", type=['png', 'jpg', 'jpeg', 'pdf'])
+    # ✨ MULTI-IMAGE UPLOAD UPGRADE ✨
+    img_files = st.file_uploader("Upload Graph Files (Up to 10)", type=['png', 'jpg', 'jpeg', 'pdf'], accept_multiple_files=True)
     
-    if img_file:
-        if img_file.name.lower().endswith('.pdf'):
-            st.success("📄 PDF Document Detected. The vision engine will scan the first page.")
+    if img_files:
+        if len(img_files) > 10:
+            st.warning("⚠️ Limit reached. Processing first 10 files.")
+            img_files = img_files[:10]
+            
+        selected_img_name = st.selectbox("📸 Select Image to Digitize:", [f.name for f in img_files])
+        active_img = next(f for f in img_files if f.name == selected_img_name)
+        
+        if active_img.name.lower().endswith('.pdf'):
+            st.success(f"📄 PDF {active_img.name} Detected. Scanning first page.")
         else:
-            st.image(img_file, width=600, caption="Uploaded Original Graph")
+            st.image(active_img, width=600, caption=f"Uploaded: {active_img.name}")
             
         with st.expander("⚙️ Advanced Vision Engine Tuning", expanded=True):
-            st.markdown("Adjust these filters if the engine misses points or captures noise (like text/gridlines).")
+            st.markdown("Adjust these filters if the engine misses points or captures noise.")
             c1, c2, c3 = st.columns(3)
             with c1:
                 ui_min_area = st.slider("Minimum Point Size", 1, 50, 10) 
@@ -553,15 +574,14 @@ elif module == "📸 Auto-Digitizer (Graph OCR)":
         
         if st.button("Initialize Vision Pipeline", use_container_width=True):
             with st.spinner("Running OpenCV Contours & Tesseract OCR..."):
-                digitizer = GraphDigitizer(img_file)
+                digitizer = GraphDigitizer(active_img)
                 
-                # Pass the UI slider values into the engine
                 pixels = digitizer.isolate_data_points(min_area=ui_min_area, max_area=ui_max_area, min_circularity=ui_circularity)
                 extracted_df = digitizer.map_to_real_data(pixels)
                 
                 if not extracted_df.empty:
                     st.session_state['digitized_df'] = extracted_df
-                    st.success(f"Successfully digitized {len(extracted_df)} data points.")
+                    st.success(f"Successfully digitized {len(extracted_df)} data points from {active_img.name}.")
                     st.info("💾 Data routed to Global Memory Bank. You can now use this in the Pharmacodynamics module.")
                     
                     col1, col2 = st.columns([2, 1])
@@ -577,7 +597,6 @@ elif module == "🤖 BioSIGHT Global Copilot":
     st.title("BioSIGHT Global Copilot")
     st.caption("Your AI Research Assistant. Ask questions about your biological data.")
     
-    # 1. Configure the Gemini Engine securely
     try:
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
         model = genai.GenerativeModel('gemini-2.5-flash')
@@ -585,22 +604,17 @@ elif module == "🤖 BioSIGHT Global Copilot":
         st.error(f"API Key Error: {e}. Ensure secrets.toml is configured.")
         st.stop()
 
-    # 2. Display previous chat messages from memory
     for msg in st.session_state['chat_history']:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    # 3. The Chat Input box at the bottom of the screen
     if user_prompt := st.chat_input("Ask me to analyze your IC50 data, explain Monod kinetics, or write a conclusion..."):
         
-        # Display user's message instantly
         with st.chat_message("user"):
             st.markdown(user_prompt)
         
-        # Save user message to memory
         st.session_state['chat_history'].append({"role": "user", "content": user_prompt})
         
-        # 4. Context Injection: Let the AI "see" the Global Memory Bank
         system_context = "You are the BioSIGHT Global Copilot, an expert AI assistant in a high-throughput biotechnology software platform. "
         
         if not st.session_state['digitized_df'].empty:
@@ -611,7 +625,6 @@ elif module == "🤖 BioSIGHT Global Copilot":
             
         system_context += f"User's query: {user_prompt}"
 
-        # 5. Generate AI Response
         with st.chat_message("assistant"):
             with st.spinner("Analyzing..."):
                 try:
@@ -625,26 +638,25 @@ elif module == "📈 Quality Control (SPC)":
     st.title("📈 Statistical Process Control")
     st.markdown("Monitor laboratory instrument calibration and assay drift using Levey-Jennings methodology.")
     with st.expander("ℹ️ Data Upload Instructions"):
-        st.markdown("Upload instrument QC logs. The AI will look for a time/run vector and a fluctuating control vector.")
+        st.markdown("Upload instrument QC logs. Verify the column mappings below.")
     
     import numpy as np
     import plotly.graph_objects as go
     
-    # ✨ ZERO-TOUCH DEEP SCANNER (QC) ✨
+    # ✨ HYBRID SMART IMPORTER ✨
     if 'active_dataset' in st.session_state:
         df_raw = st.session_state['active_dataset'].copy()
+        cols = df_raw.columns.tolist()
         
-        run_col, val_col = df_raw.columns[0], df_raw.columns[-1]
-        for col in df_raw.columns:
-            if pd.api.types.is_numeric_dtype(df_raw[col]):
-                if df_raw[col].is_monotonic_increasing:
-                    run_col = col
-                else:
-                    val_col = col
-                    
-        st.success(f"🤖 BioSIGHT DeepScan mapped Runs to '{run_col}' and Values to '{val_col}'.")
+        g_d = next((c for c in cols if any(k in c.lower() for k in ['day', 'run', 'time', 'date', 'x'])), cols[0])
+        g_v = next((c for c in cols if any(k in c.lower() for k in ['val', 'ctrl', 'read', 'meas', 'y'])), cols[-1] if len(cols)>1 else cols[0])
         
-        df_qc = df_raw.rename(columns={run_col: 'Run_Day', val_col: 'Control_Value'})
+        st.info("🧠 Auto-Mapped QC Log:")
+        c1, c2 = st.columns(2)
+        with c1: col_d = st.selectbox("Select Run/Day Column:", cols, index=cols.index(g_d))
+        with c2: col_v = st.selectbox("Select Control Value Column:", cols, index=cols.index(g_v))
+        
+        df_qc = df_raw.rename(columns={col_d: 'Run_Day', col_v: 'Control_Value'})
         df_qc['Run_Day'] = pd.to_numeric(df_qc['Run_Day'], errors='coerce')
         df_qc['Control_Value'] = pd.to_numeric(df_qc['Control_Value'], errors='coerce')
         df_qc = df_qc.dropna(subset=['Run_Day', 'Control_Value'])
@@ -658,7 +670,6 @@ elif module == "📈 Quality Control (SPC)":
         qc_values = np.random.normal(loc=100, scale=5, size=30)
         qc_values[27] = 118 
             
-    # 2. Calculate the Statistical Thresholds
     mean_val = np.mean(qc_values)
     sd_val = np.std(qc_values)
             
@@ -668,20 +679,11 @@ elif module == "📈 Quality Control (SPC)":
     col3.metric("Warning Limit (±2σ)", f"{(mean_val + 2*sd_val):.2f}")
     col4.metric("Action Limit (±3σ)", f"{(mean_val + 3*sd_val):.2f}")
             
-    # 3. Draw the Levey-Jennings Chart
     fig = go.Figure()
-            
-    # Add the actual data points
     fig.add_trace(go.Scatter(x=days, y=qc_values, mode='lines+markers', name='Daily QC Run', line=dict(color='#00d4ff')))
-            
-    # Add the Mean line (Green)
     fig.add_hline(y=mean_val, line_dash="dash", line_color="#00ff00", annotation_text="Mean")
-            
-    # Add ±2 SD lines (Yellow - Warning)
     fig.add_hline(y=mean_val + 2*sd_val, line_dash="dot", line_color="#ffff00", annotation_text="+2 SD")
     fig.add_hline(y=mean_val - 2*sd_val, line_dash="dot", line_color="#ffff00", annotation_text="-2 SD")
-            
-    # Add ±3 SD lines (Red - Action Required)
     fig.add_hline(y=mean_val + 3*sd_val, line_dash="solid", line_color="#ff0000", annotation_text="+3 SD (Action)")
     fig.add_hline(y=mean_val - 3*sd_val, line_dash="solid", line_color="#ff0000", annotation_text="-3 SD (Action)")
             
@@ -693,10 +695,8 @@ elif module == "📈 Quality Control (SPC)":
         paper_bgcolor='rgba(0,0,0,0)',
         font=dict(color='white')
     )
-            
     st.plotly_chart(fig, use_container_width=True)
             
-    # 4. Automated Anomaly Detection
     st.subheader("⚠️ System Alerts")
     outliers = np.where(qc_values > (mean_val + 3*sd_val))[0]
     if len(outliers) > 0:
